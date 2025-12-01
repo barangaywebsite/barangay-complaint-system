@@ -136,42 +136,52 @@
     ];
 
     // ========== API FUNCTIONS ==========
-    async function apiGet(type) {
-      try {
-        const response = await fetch(`${API_URL}?type=${type}`);
-        const data = await response.json();
-        if (data.error) {
-          console.error('API Error:', data.error);
-          return [];
-        }
-        return data;
-      } catch (error) {
-        console.error('Fetch error:', error);
-        showToast('Connection error. Please try again.', 'error');
-        return [];
-      }
+// API GET - Fetch data
+async function apiGet(type) {
+  try {
+    const response = await fetch(`${API_URL}?type=${type}`);
+    const data = await response.json();
+    if (data.error) {
+      console.error('API Error:', data.error);
+      return [];
     }
+    return data;
+  } catch (error) {
+    console.error('Fetch error:', error);
+    showToast('Connection error. Please try again.', 'error');
+    return [];
+  }
+}
 
-    async function apiPost(action, type, record = null, id = null) {
-      try {
-        const payload = { action, type };
-        if (record) payload.record = record;
-        if (id) payload.id = id;
-        
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        console.error('API Post error:', error);
-        showToast('Connection error. Please try again.', 'error');
-        return { success: false, error: error.toString() };
-      }
+// API POST - Send data (using GET with parameters)
+async function apiPost(action, type, record = null, id = null) {
+  try {
+    let url = `${API_URL}?action=${action}&type=${type}`;
+    
+    if (record) {
+      url += `&record=${encodeURIComponent(JSON.stringify(record))}`;
     }
+    
+    if (id) {
+      url += `&id=${encodeURIComponent(id)}`;
+    }
+    
+    console.log('Making request to:', url); // DEBUG
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    console.log('Response:', data); // DEBUG
+    
+    return data;
+  } catch (error) {
+    console.error('API Post error:', error);
+    showToast('Connection error. Please try again.', 'error');
+    return { success: false, error: error.toString() };
+  }
+}
+
+
 
     // ========== DATA FUNCTIONS ==========
     async function loadAllData() {
