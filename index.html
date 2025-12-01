@@ -57,23 +57,31 @@
  <body>
   <div id="app" class="min-h-full flex flex-col"></div>
   <script>
-   const API_URL = "https://script.google.com/macros/s/AKfycbzPLL0SU4lJSFfjf0plXUNSfl_XqfEbzuVUuZUOz6xaQ6ae8yD7ciFXwoXacckaCsMz/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyDaToQAjaNNn21eAVUT89KtgPDjgi6KnKlWTJGtr4ymSEpikbhYpO7HuT9DcDvRtEA/exec"; // replace
 
 const dataSdk = {
-  create: async (data) => {
+  getAll: async () => {
+    const res = await fetch(API_URL + "?action=getAll");
+    return await res.json();
+  },
+
+  create: async (record) => {
     const res = await fetch(API_URL, {
       method: "POST",
-      body: JSON.stringify(data)
+      body: JSON.stringify({ action: "create", record })
     });
-
-    const json = await res.json();
-    return { isOk: json.result === "OK", data: json };
+    return await res.json();
   },
-  
-  update: async () => {
-    alert("Update function must be manually added — Google Sheets API does not support direct row update without row number.");
+
+  update: async (record) => {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "update", record })
+    });
+    return await res.json();
   }
 };
+
 
     const defaultConfig = {
       background_color: "#f0f4f8",
