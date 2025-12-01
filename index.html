@@ -1,24 +1,1884 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Barangay Complaint System</title>
-
-  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow-x: hidden;
+    }
+    
+    html {
+      height: 100%;
+    }
 
-  <!-- Chart.js for analytics -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    .tab-button {
+      transition: all 0.3s ease;
+    }
 
-  <!-- Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
 
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body class="bg-slate-50 text-slate-800 antialiased">
-  <div id="app" class="min-h-screen"></div>
+    .complaint-card {
+      transition: all 0.2s ease;
+    }
 
-  <script src="script.js" defer></script>
-</body>
+    .complaint-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .upvote-button {
+      transition: all 0.2s ease;
+    }
+
+    .upvote-button:hover {
+      transform: scale(1.05);
+    }
+
+    .upvote-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .loading-spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #2563eb;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+  <script src="/_sdk/element_sdk.js" type="text/javascript"></script>
+ </head>
+ <body>
+  <div id="app" class="min-h-full flex flex-col"></div>
+  <script>
+    // ========== CONFIGURATION ==========
+    const API_URL = 'YOUR_WEB_APP_URL'; // Replace with your Google Apps Script Web App URL
+    
+    const config = {
+      background_color: "#f0f4f8",
+      surface_color: "#ffffff",
+      text_color: "#1a202c",
+      primary_action_color: "#2563eb",
+      secondary_action_color: "#64748b",
+      font_family: "Inter",
+      font_size: 16,
+      barangay_name: "Barangay San Miguel",
+      welcome_message: "Welcome to Our Community Portal",
+      form_title: "Submit New Complaint",
+      submit_button_text: "Submit Complaint"
+    };
+
+    // ========== STATE ==========
+    let currentTab = 'complaints';
+    let currentUser = null;
+    let authMode = 'login';
+    let userType = 'resident';
+    let adminTab = 'complaints';
+    let statusFilter = 'all';
+    let categoryFilter = 'all';
+    let dateFilter = 'all';
+    let startDate = '';
+    let endDate = '';
+    let editingAnnouncement = null;
+    let editingOfficial = null;
+    let editingHotline = null;
+    let reportStatusFilter = 'all';
+    let reportDateFilter = 'all';
+    let reportStartDate = '';
+    let reportEndDate = '';
+    let isLoading = false;
+
+    // Cache for data
+    let cachedUsers = [];
+    let cachedComplaints = [];
+    let cachedVotes = [];
+    let cachedAnnouncements = [];
+    let cachedOfficials = [];
+    let cachedHotlines = [];
+
+    const categories = [
+      'Roads',
+      'Garbage Collection',
+      'Noise/Disturbance',
+      'Drainage',
+      'Security',
+      'Lighting',
+      'Other'
+    ];
+
+    const statusTypes = [
+      { value: 'submitted', label: 'Submitted', color: '#94a3b8' },
+      { value: 'under_review', label: 'Under Review', color: '#60a5fa' },
+      { value: 'assigned', label: 'Assigned to Officer', color: '#a78bfa' },
+      { value: 'in_progress', label: 'In Progress', color: '#fb923c' },
+      { value: 'resolved', label: 'Resolved', color: '#34d399' }
+    ];
+
+    // ========== API FUNCTIONS ==========
+    async function apiGet(type) {
+      try {
+        const response = await fetch(`${API_URL}?type=${type}`);
+        const data = await response.json();
+        if (data.error) {
+          console.error('API Error:', data.error);
+          return [];
+        }
+        return data;
+      } catch (error) {
+        console.error('Fetch error:', error);
+        showToast('Connection error. Please try again.', 'error');
+        return [];
+      }
+    }
+
+    async function apiPost(action, type, record = null, id = null) {
+      try {
+        const payload = { action, type };
+        if (record) payload.record = record;
+        if (id) payload.id = id;
+        
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error('API Post error:', error);
+        showToast('Connection error. Please try again.', 'error');
+        return { success: false, error: error.toString() };
+      }
+    }
+
+    // ========== DATA FUNCTIONS ==========
+    async function loadAllData() {
+      isLoading = true;
+      renderUI();
+      
+      const [users, complaints, votes, announcements, officials, hotlines] = await Promise.all([
+        apiGet('Users'),
+        apiGet('Complaints'),
+        apiGet('Votes'),
+        apiGet('Announcements'),
+        apiGet('Officials'),
+        apiGet('Hotlines')
+      ]);
+      
+      cachedUsers = users;
+      cachedComplaints = complaints;
+      cachedVotes = votes;
+      cachedAnnouncements = announcements.sort((a, b) => new Date(b.date) - new Date(a.date));
+      cachedOfficials = officials;
+      cachedHotlines = hotlines;
+      
+      isLoading = false;
+      renderUI();
+    }
+
+    function getUsers() {
+      return cachedUsers;
+    }
+
+    function getComplaints() {
+      return cachedComplaints;
+    }
+
+    function getVotes() {
+      return cachedVotes;
+    }
+
+    function getAnnouncements() {
+      return cachedAnnouncements;
+    }
+
+    function getOfficials() {
+      return cachedOfficials;
+    }
+
+    function getHotlines() {
+      return cachedHotlines;
+    }
+
+    function hasUserVoted(complaintId, userId) {
+      return cachedVotes.some(v => v.complaintId === complaintId && v.userId === userId);
+    }
+
+    function getStatusColor(status) {
+      const statusObj = statusTypes.find(s => s.value === status);
+      return statusObj ? statusObj.color : '#94a3b8';
+    }
+
+    function getStatusLabel(status) {
+      const statusObj = statusTypes.find(s => s.value === status);
+      return statusObj ? statusObj.label : 'Unknown';
+    }
+
+    function filterComplaintsByDate(complaints, filterType, start, end) {
+      if (filterType === 'all') return complaints;
+      
+      if (filterType === 'custom' && start && end) {
+        const startD = new Date(start);
+        startD.setHours(0, 0, 0, 0);
+        const endD = new Date(end);
+        endD.setHours(23, 59, 59, 999);
+        
+        return complaints.filter(c => {
+          const complaintDate = new Date(c.createdAt);
+          return complaintDate >= startD && complaintDate <= endD;
+        });
+      }
+      
+      const now = new Date();
+      const filtered = complaints.filter(c => {
+        const complaintDate = new Date(c.createdAt);
+        const daysDiff = Math.floor((now - complaintDate) / (1000 * 60 * 60 * 24));
+        
+        if (filterType === 'today') return daysDiff === 0;
+        if (filterType === 'week') return daysDiff <= 7;
+        if (filterType === 'month') return daysDiff <= 30;
+        if (filterType === 'year') return daysDiff <= 365;
+        
+        return true;
+      });
+      
+      return filtered;
+    }
+
+    function generateReportData() {
+      let complaints = getComplaints();
+      
+      if (reportStatusFilter !== 'all') {
+        complaints = complaints.filter(c => c.status === reportStatusFilter);
+      }
+      
+      complaints = filterComplaintsByDate(complaints, reportDateFilter, reportStartDate, reportEndDate);
+      
+      const statusCounts = {};
+      statusTypes.forEach(st => {
+        statusCounts[st.value] = complaints.filter(c => c.status === st.value).length;
+      });
+      
+      return { statusCounts, total: complaints.length };
+    }
+
+    function drawPieChart(canvasId, data) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = Math.min(centerX, centerY) - 40;
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      const total = data.total;
+      if (total === 0) {
+        ctx.fillStyle = config.text_color;
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No data to display', centerX, centerY);
+        return;
+      }
+      
+      let currentAngle = -Math.PI / 2;
+      
+      statusTypes.forEach(st => {
+        const count = data.statusCounts[st.value];
+        if (count > 0) {
+          const sliceAngle = (count / total) * 2 * Math.PI;
+          
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+          ctx.closePath();
+          ctx.fillStyle = st.color;
+          ctx.fill();
+          
+          ctx.strokeStyle = config.surface_color;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          const labelAngle = currentAngle + sliceAngle / 2;
+          const labelX = centerX + (radius * 0.7) * Math.cos(labelAngle);
+          const labelY = centerY + (radius * 0.7) * Math.sin(labelAngle);
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(count, labelX, labelY);
+          
+          currentAngle += sliceAngle;
+        }
+      });
+    }
+
+    // ========== EVENT HANDLERS ==========
+    async function handleLogin(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      const username = formData.get('username');
+      const password = formData.get('password');
+      const adminId = formData.get('admin_id');
+
+      isLoading = true;
+      renderUI();
+      
+      await loadAllData();
+
+      let user;
+      if (userType === 'admin') {
+        user = cachedUsers.find(u => u.username === username && u.password === password && u.userType === 'admin' && u.adminId === adminId);
+      } else {
+        user = cachedUsers.find(u => u.username === username && u.password === password && u.userType === 'resident');
+      }
+      
+      isLoading = false;
+      
+      if (user) {
+        currentUser = user;
+        showToast('Login successful!', 'success');
+        renderUI();
+      } else {
+        showToast(userType === 'admin' ? 'Invalid credentials or Admin ID' : 'Invalid username or password', 'error');
+        renderUI();
+      }
+    }
+
+    async function handleSignup(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      const username = formData.get('username');
+      const password = formData.get('password');
+      const fullName = formData.get('full_name');
+      const adminId = formData.get('admin_id');
+
+      const existingUser = cachedUsers.find(u => u.username === username);
+      
+      if (existingUser) {
+        showToast('Username already exists. Please choose another.', 'error');
+        return;
+      }
+
+      const newUser = {
+        id: Date.now().toString(),
+        username,
+        password,
+        fullName,
+        userType,
+        adminId: userType === 'admin' ? adminId : '',
+        createdAt: new Date().toISOString()
+      };
+
+      isLoading = true;
+      renderUI();
+      
+      const result = await apiPost('create', 'Users', newUser);
+      
+      isLoading = false;
+      
+      if (result.success) {
+        cachedUsers.push(newUser);
+        showToast('Account created successfully! Please login.', 'success');
+        authMode = 'login';
+        renderUI();
+      } else {
+        showToast('Failed to create account. Please try again.', 'error');
+        renderUI();
+      }
+    }
+
+    async function handleComplaintSubmit(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      
+      const newComplaint = {
+        id: Date.now().toString(),
+        title: formData.get('title'),
+        description: formData.get('description'),
+        category: formData.get('category'),
+        status: 'submitted',
+        upvotes: 0,
+        createdAt: new Date().toISOString(),
+        residentName: currentUser.fullName,
+        userId: currentUser.id
+      };
+
+      isLoading = true;
+      renderUI();
+      
+      const result = await apiPost('create', 'Complaints', newComplaint);
+      
+      isLoading = false;
+      
+      if (result.success) {
+        cachedComplaints.push(newComplaint);
+        e.target.reset();
+        showToast('Complaint submitted successfully!', 'success');
+        currentTab = 'complaints';
+        renderUI();
+      } else {
+        showToast('Failed to submit complaint. Please try again.', 'error');
+        renderUI();
+      }
+    }
+
+    async function handleUpvote(complaintId) {
+      if (!currentUser) return;
+
+      if (hasUserVoted(complaintId, currentUser.id)) {
+        showToast('You have already voted on this complaint.', 'error');
+        return;
+      }
+
+      const complaint = cachedComplaints.find(c => c.id === complaintId);
+      
+      if (complaint) {
+        const updatedComplaint = { ...complaint, upvotes: complaint.upvotes + 1 };
+        
+        const newVote = {
+          id: Date.now().toString(),
+          complaintId,
+          userId: currentUser.id,
+          createdAt: new Date().toISOString()
+        };
+
+        isLoading = true;
+        renderUI();
+        
+        const [updateResult, voteResult] = await Promise.all([
+          apiPost('update', 'Complaints', updatedComplaint),
+          apiPost('create', 'Votes', newVote)
+        ]);
+        
+        isLoading = false;
+        
+        if (updateResult.success && voteResult.success) {
+          const index = cachedComplaints.findIndex(c => c.id === complaintId);
+          if (index !== -1) {
+            cachedComplaints[index] = updatedComplaint;
+          }
+          cachedVotes.push(newVote);
+          
+          showToast('Upvoted successfully!', 'success');
+          renderUI();
+        } else {
+          showToast('Failed to upvote. Please try again.', 'error');
+          renderUI();
+        }
+      }
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      currentTab = 'complaints';
+      adminTab = 'complaints';
+      renderUI();
+      showToast('Logged out successfully', 'success');
+    }
+
+    async function handleStatusUpdate(complaintId, newStatus) {
+      const complaint = cachedComplaints.find(c => c.id === complaintId);
+      
+      if (complaint) {
+        const updatedComplaint = { ...complaint, status: newStatus };
+        
+        isLoading = true;
+        renderUI();
+        
+        const result = await apiPost('update', 'Complaints', updatedComplaint);
+        
+        isLoading = false;
+        
+        if (result.success) {
+          const index = cachedComplaints.findIndex(c => c.id === complaintId);
+          if (index !== -1) {
+            cachedComplaints[index] = updatedComplaint;
+          }
+          
+          showToast('Complaint status updated!', 'success');
+          
+          if (adminTab === 'reports') {
+            setTimeout(() => {
+              const reportData = generateReportData();
+              drawPieChart('report-chart', reportData);
+            }, 100);
+          }
+          
+          renderUI();
+        } else {
+          showToast('Failed to update status. Please try again.', 'error');
+          renderUI();
+        }
+      }
+    }
+
+    async function handleAnnouncementSubmit(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+
+      if (editingAnnouncement) {
+        const updatedAnnouncement = {
+          ...editingAnnouncement,
+          title: formData.get('title'),
+          content: formData.get('content'),
+          priority: formData.get('priority'),
+          date: formData.get('date')
+        };
+        
+        isLoading = true;
+        renderUI();
+        
+        const result = await apiPost('update', 'Announcements', updatedAnnouncement);
+        
+        isLoading = false;
+        
+        if (result.success) {
+          const index = cachedAnnouncements.findIndex(a => a.id === editingAnnouncement.id);
+          if (index !== -1) {
+            cachedAnnouncements[index] = updatedAnnouncement;
+          }
+          cachedAnnouncements.sort((a, b) => new Date(b.date) - new Date(a.date));
+          
+          showToast('Announcement updated!', 'success');
+          editingAnnouncement = null;
+          renderUI();
+        } else {
+          showToast('Failed to update announcement. Please try again.', 'error');
+          renderUI();
+        }
+      } else {
+        const newAnnouncement = {
+          id: Date.now().toString(),
+          title: formData.get('title'),
+          content: formData.get('content'),
+          priority: formData.get('priority'),
+          date: formData.get('date'),
+          createdAt: new Date().toISOString()
+        };
+
+        isLoading = true;
+        renderUI();
+        
+        const result = await apiPost('create', 'Announcements', newAnnouncement);
+        
+        isLoading = false;
+        
+        if (result.success) {
+          cachedAnnouncements.push(newAnnouncement);
+          cachedAnnouncements.sort((a, b) => new Date(b.date) - new Date(a.date));
+          
+          e.target.reset();
+          showToast('Announcement created!', 'success');
+          renderUI();
+        } else {
+          showToast('Failed to create announcement. Please try again.', 'error');
+          renderUI();
+        }
+      }
+    }
+
+    async function handleDeleteAnnouncement(announcementId) {
+      isLoading = true;
+      renderUI();
+      
+      const result = await apiPost('delete', 'Announcements', null, announcementId);
+      
+      isLoading = false;
+      
+      if (result.success) {
+        cachedAnnouncements = cachedAnnouncements.filter(a => a.id !== announcementId);
+        showToast('Announcement deleted!', 'success');
+        renderUI();
+      } else {
+        showToast('Failed to delete announcement. Please try again.', 'error');
+        renderUI();
+      }
+    }
+
+    async function handleOfficialSubmit(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+
+      if (editingOfficial) {
+        const updatedOfficial = {
+          ...editingOfficial,
+          name: formData.get('name'),
+          position: formData.get('position'),
+          contact: formData.get('contact')
+        };
+        
+        isLoading = true;
+        renderUI();
+        
+        const result = await apiPost('update', 'Officials', updatedOfficial);
+        
+        isLoading = false;
+        
+        if (result.success) {
+          const index = cachedOfficials.findIndex(o => o.id === editingOfficial.id);
+          if (index !== -1) {
+            cachedOfficials[index] = updatedOfficial;
+          }
+          
+          showToast('Official updated!', 'success');
+          editingOfficial = null;
+          renderUI();
+        } else {
+          showToast('Failed to update official. Please try again.', 'error');
+          renderUI();
+        }
+      } else {
+        const newOfficial = {
+          id: Date.now().toString(),
+          name: formData.get('name'),
+          position: formData.get('position'),
+          contact: formData.get('contact'),
+          createdAt: new Date().toISOString()
+        };
+
+        isLoading = true;
+        renderUI();
+        
+        const result = await apiPost('create', 'Officials', newOfficial);
+        
+        isLoading = false;
+        
+        if (result.success) {
+          cachedOfficials.push(newOfficial);
+          e.target.reset();
+          showToast('Official added!', 'success');
+          renderUI();
+        } else {
+          showToast('Failed to add official. Please try again.', 'error');
+          renderUI();
+        }
+      }
+    }
+
+    async function handleDeleteOfficial(officialId) {
+      isLoading = true;
+      renderUI();
+      
+      const result = await apiPost('delete', 'Officials', null, officialId);
+      
+      isLoading = false;
+      
+      if (result.success) {
+        cachedOfficials = cachedOfficials.filter(o => o.id !== officialId);
+        showToast('Official removed!', 'success');
+        renderUI();
+      } else {
+        showToast('Failed to remove official. Please try again.', 'error');
+        renderUI();
+      }
+    }
+
+    async function handleHotlineSubmit(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+
+      if (editingHotline) {
+        const updatedHotline = {
+          ...editingHotline,
+          serviceName: formData.get('service_name'),
+          phoneNumber: formData.get('phone_number'),
+          description: formData.get('description'),
+          availableHours: formData.get('available_hours')
+        };
+        
+        isLoading = true;
+        renderUI();
+        
+        const result = await apiPost('update', 'Hotlines', updatedHotline);
+        
+        isLoading = false;
+        
+        if (result.success) {
+          const index = cachedHotlines.findIndex(h => h.id === editingHotline.id);
+          if (index !== -1) {
+            cachedHotlines[index] = updatedHotline;
+          }
+          
+          showToast('Hotline updated!', 'success');
+          editingHotline = null;
+          renderUI();
+        } else {
+          showToast('Failed to update hotline. Please try again.', 'error');
+          renderUI();
+        }
+      } else {
+        const newHotline = {
+          id: Date.now().toString(),
+          serviceName: formData.get('service_name'),
+          phoneNumber: formData.get('phone_number'),
+          description: formData.get('description'),
+          availableHours: formData.get('available_hours'),
+          createdAt: new Date().toISOString()
+        };
+
+        isLoading = true;
+        renderUI();
+        
+        const result = await apiPost('create', 'Hotlines', newHotline);
+        
+        isLoading = false;
+        
+        if (result.success) {
+          cachedHotlines.push(newHotline);
+          e.target.reset();
+          showToast('Hotline added!', 'success');
+          renderUI();
+        } else {
+          showToast('Failed to add hotline. Please try again.', 'error');
+          renderUI();
+        }
+      }
+    }
+
+    async function handleDeleteHotline(hotlineId) {
+      isLoading = true;
+      renderUI();
+      
+      const result = await apiPost('delete', 'Hotlines', null, hotlineId);
+      
+      isLoading = false;
+      
+      if (result.success) {
+        cachedHotlines = cachedHotlines.filter(h => h.id !== hotlineId);
+        showToast('Hotline removed!', 'success');
+        renderUI();
+      } else {
+        showToast('Failed to remove hotline. Please try again.', 'error');
+        renderUI();
+      }
+    }
+
+    function startEditAnnouncement(announcementId) {
+      editingAnnouncement = cachedAnnouncements.find(a => a.id === announcementId);
+      renderUI();
+    }
+
+    function cancelEditAnnouncement() {
+      editingAnnouncement = null;
+      renderUI();
+    }
+
+    function startEditOfficial(officialId) {
+      editingOfficial = cachedOfficials.find(o => o.id === officialId);
+      renderUI();
+    }
+
+    function cancelEditOfficial() {
+      editingOfficial = null;
+      renderUI();
+    }
+
+    function startEditHotline(hotlineId) {
+      editingHotline = cachedHotlines.find(h => h.id === hotlineId);
+      renderUI();
+    }
+
+    function cancelEditHotline() {
+      editingHotline = null;
+      renderUI();
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      const bgColor = type === 'success' ? '#34d399' : type === 'error' ? '#f87171' : '#60a5fa';
+      toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${bgColor};
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 10000;
+        font-weight: 500;
+        max-width: 300px;
+      `;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.3s ease';
+        toast.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(toast), 300);
+      }, 3000);
+    }
+
+    // ========== RENDER FUNCTIONS ==========
+    function renderLoadingScreen() {
+      const customFont = config.font_family;
+      const baseFontStack = 'system-ui, -apple-system, sans-serif';
+      const fontFamily = `${customFont}, ${baseFontStack}`;
+      const baseSize = config.font_size;
+      const backgroundColor = config.background_color;
+      const textColor = config.text_color;
+
+      return `
+        <div style="background: ${backgroundColor}; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; font-family: ${fontFamily}; color: ${textColor};">
+          <div class="loading-spinner"></div>
+          <p style="font-size: ${baseSize * 1.1}px; margin-top: 1.5rem; font-weight: 500;">Loading...</p>
+        </div>
+      `;
+    }
+
+    function renderAuthScreen() {
+      const customFont = config.font_family;
+      const baseFontStack = 'system-ui, -apple-system, sans-serif';
+      const fontFamily = `${customFont}, ${baseFontStack}`;
+      const baseSize = config.font_size;
+
+      const backgroundColor = config.background_color;
+      const surfaceColor = config.surface_color;
+      const textColor = config.text_color;
+      const primaryColor = config.primary_action_color;
+      const secondaryColor = config.secondary_action_color;
+
+      const barangayName = config.barangay_name;
+      const welcomeMessage = config.welcome_message;
+
+      if (isLoading) {
+        document.getElementById('app').innerHTML = renderLoadingScreen();
+        return;
+      }
+
+      const authHtml = `
+        <div style="background: ${backgroundColor}; min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 2rem; font-family: ${fontFamily}; color: ${textColor};">
+          <div style="width: 100%; max-width: 450px;">
+            <div style="text-align: center; margin-bottom: 2rem;">
+              <h1 style="font-size: ${baseSize * 2}px; font-weight: 700; margin: 0 0 0.5rem 0;">${barangayName}</h1>
+              <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0;">${welcomeMessage}</p>
+            </div>
+
+            <div style="background: ${surfaceColor}; border-radius: 16px; padding: 2.5rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
+              <div style="margin-bottom: 1.5rem;">
+                <div style="display: flex; gap: 0.5rem; background: ${backgroundColor}; padding: 0.25rem; border-radius: 8px;">
+                  <button onclick="switchUserType('resident')" style="flex: 1; padding: 0.75rem; border: none; background: ${userType === 'resident' ? surfaceColor : 'transparent'}; color: ${userType === 'resident' ? primaryColor : textColor}; font-weight: ${userType === 'resident' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily}; box-shadow: ${userType === 'resident' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'};">
+                    👤 Resident
+                  </button>
+                  <button onclick="switchUserType('admin')" style="flex: 1; padding: 0.75rem; border: none; background: ${userType === 'admin' ? surfaceColor : 'transparent'}; color: ${userType === 'admin' ? primaryColor : textColor}; font-weight: ${userType === 'admin' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily}; box-shadow: ${userType === 'admin' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'};">
+                    🔑 Admin
+                  </button>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 2rem;">
+                <div style="display: flex; gap: 0.5rem; background: ${backgroundColor}; padding: 0.25rem; border-radius: 8px;">
+                  <button onclick="switchAuthMode('login')" style="flex: 1; padding: 0.75rem; border: none; background: ${authMode === 'login' ? surfaceColor : 'transparent'}; color: ${authMode === 'login' ? primaryColor : textColor}; font-weight: ${authMode === 'login' ? '600' : '500'}; font-size: ${baseSize}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily}; box-shadow: ${authMode === 'login' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'};">
+                    Login
+                  </button>
+                  <button onclick="switchAuthMode('signup')" style="flex: 1; padding: 0.75rem; border: none; background: ${authMode === 'signup' ? surfaceColor : 'transparent'}; color: ${authMode === 'signup' ? primaryColor : textColor}; font-weight: ${authMode === 'signup' ? '600' : '500'}; font-size: ${baseSize}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily}; box-shadow: ${authMode === 'signup' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'};">
+                    Sign Up
+                  </button>
+                </div>
+              </div>
+
+              ${authMode === 'login' ? `
+                <form id="login-form">
+                  <div style="margin-bottom: 1.5rem;">
+                    <label for="login-username" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Username</label>
+                    <input type="text" id="login-username" name="username" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                  </div>
+
+                  <div style="margin-bottom: ${userType === 'admin' ? '1.5rem' : '2rem'};">
+                    <label for="login-password" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Password</label>
+                    <input type="password" id="login-password" name="password" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                  </div>
+
+                  ${userType === 'admin' ? `
+                    <div style="margin-bottom: 2rem;">
+                      <label for="login-admin-id" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Admin ID Number</label>
+                      <input type="text" id="login-admin-id" name="admin_id" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                    </div>
+                  ` : ''}
+
+                  <button type="submit" style="width: 100%; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize * 1.1}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Login
+                  </button>
+                </form>
+              ` : `
+                <form id="signup-form">
+                  <div style="margin-bottom: 1.5rem;">
+                    <label for="signup-fullname" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Full Name</label>
+                    <input type="text" id="signup-fullname" name="full_name" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                  </div>
+
+                  <div style="margin-bottom: 1.5rem;">
+                    <label for="signup-username" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Username</label>
+                    <input type="text" id="signup-username" name="username" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                  </div>
+
+                  <div style="margin-bottom: ${userType === 'admin' ? '1.5rem' : '2rem'};">
+                    <label for="signup-password" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Password</label>
+                    <input type="password" id="signup-password" name="password" required minlength="6" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                    <p style="font-size: ${baseSize * 0.8}px; color: ${secondaryColor}; margin: 0.5rem 0 0 0;">Minimum 6 characters</p>
+                  </div>
+
+                  ${userType === 'admin' ? `
+                    <div style="margin-bottom: 2rem;">
+                      <label for="signup-admin-id" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Admin ID Number</label>
+                      <input type="text" id="signup-admin-id" name="admin_id" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                      <p style="font-size: ${baseSize * 0.8}px; color: ${secondaryColor}; margin: 0.5rem 0 0 0;">Your official admin identification number</p>
+                    </div>
+                  ` : ''}
+
+                  <button type="submit" style="width: 100%; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize * 1.1}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Create Account
+                  </button>
+                </form>
+              `}
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('app').innerHTML = authHtml;
+
+      if (authMode === 'login') {
+        const form = document.getElementById('login-form');
+        if (form) {
+          form.addEventListener('submit', handleLogin);
+        }
+      } else {
+        const form = document.getElementById('signup-form');
+        if (form) {
+          form.addEventListener('submit', handleSignup);
+        }
+      }
+    }
+
+    function renderAdminDashboard(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) {
+      return `
+        <div>
+          <div style="margin-bottom: 2rem;">
+            <div style="display: flex; gap: 0.5rem; background: ${surfaceColor}; padding: 0.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); flex-wrap: wrap;">
+              <button onclick="switchAdminTab('complaints')" style="flex: 1; min-width: 120px; padding: 0.75rem; border: none; background: ${adminTab === 'complaints' ? primaryColor : 'transparent'}; color: ${adminTab === 'complaints' ? 'white' : textColor}; font-weight: ${adminTab === 'complaints' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily};">
+                Complaints
+              </button>
+              <button onclick="switchAdminTab('reports')" style="flex: 1; min-width: 120px; padding: 0.75rem; border: none; background: ${adminTab === 'reports' ? primaryColor : 'transparent'}; color: ${adminTab === 'reports' ? 'white' : textColor}; font-weight: ${adminTab === 'reports' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily};">
+                Reports
+              </button>
+              <button onclick="switchAdminTab('announcements')" style="flex: 1; min-width: 120px; padding: 0.75rem; border: none; background: ${adminTab === 'announcements' ? primaryColor : 'transparent'}; color: ${adminTab === 'announcements' ? 'white' : textColor}; font-weight: ${adminTab === 'announcements' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily};">
+                Announcements
+              </button>
+              <button onclick="switchAdminTab('officials')" style="flex: 1; min-width: 120px; padding: 0.75rem; border: none; background: ${adminTab === 'officials' ? primaryColor : 'transparent'}; color: ${adminTab === 'officials' ? 'white' : textColor}; font-weight: ${adminTab === 'officials' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily};">
+                Officials
+              </button>
+              <button onclick="switchAdminTab('hotlines')" style="flex: 1; min-width: 120px; padding: 0.75rem; border: none; background: ${adminTab === 'hotlines' ? primaryColor : 'transparent'}; color: ${adminTab === 'hotlines' ? 'white' : textColor}; font-weight: ${adminTab === 'hotlines' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily};">
+                Hotlines
+              </button>
+            </div>
+          </div>
+
+          ${adminTab === 'complaints' ? renderAdminComplaints(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) : ''}
+          ${adminTab === 'reports' ? renderReportsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) : ''}
+          ${adminTab === 'announcements' ? renderAdminAnnouncements(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) : ''}
+          ${adminTab === 'officials' ? renderAdminOfficials(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) : ''}
+          ${adminTab === 'hotlines' ? renderAdminHotlines(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) : ''}
+        </div>
+      `;
+    }
+
+    function renderAdminComplaints(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) {
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Complaints</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">Filter Complaints</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+              <div>
+                <label for="status-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Status</label>
+                <select id="status-filter" onchange="setStatusFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${statusFilter === 'all' ? 'selected' : ''}>All Statuses</option>
+                  ${statusTypes.map(st => `<option value="${st.value}" ${statusFilter === st.value ? 'selected' : ''}>${st.label}</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label for="category-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Category</label>
+                <select id="category-filter" onchange="setCategoryFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${categoryFilter === 'all' ? 'selected' : ''}>All Categories</option>
+                  ${categories.map(cat => `<option value="${cat}" ${categoryFilter === cat ? 'selected' : ''}>${cat}</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label for="date-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Date Range</label>
+                <select id="date-filter" onchange="setDateFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${dateFilter === 'all' ? 'selected' : ''}>All Time</option>
+                  <option value="today" ${dateFilter === 'today' ? 'selected' : ''}>Today</option>
+                  <option value="week" ${dateFilter === 'week' ? 'selected' : ''}>Last 7 Days</option>
+                  <option value="month" ${dateFilter === 'month' ? 'selected' : ''}>Last 30 Days</option>
+                  <option value="year" ${dateFilter === 'year' ? 'selected' : ''}>Last Year</option>
+                  <option value="custom" ${dateFilter === 'custom' ? 'selected' : ''}>Custom Range</option>
+                </select>
+              </div>
+            </div>
+
+            ${dateFilter === 'custom' ? `
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                <div>
+                  <label for="start-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Start Date</label>
+                  <input type="date" id="start-date" value="${startDate}" onchange="setStartDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+                <div>
+                  <label for="end-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">End Date</label>
+                  <input type="date" id="end-date" value="${endDate}" onchange="setEndDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+              </div>
+            ` : ''}
+
+            <p style="font-size: ${baseSize * 0.9}px; margin: 1rem 0 0 0; color: ${secondaryColor};">
+              Showing ${filteredComplaints.length} complaint${filteredComplaints.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+
+          <div style="display: grid; gap: 1.5rem;">
+            ${filteredComplaints.length === 0 ? `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 3rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize * 1.1}px; color: ${secondaryColor}; margin: 0;">No complaints found matching your filters.</p>
+              </div>
+            ` : filteredComplaints.map(complaint => `
+              <div class="complaint-card" style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                  <div style="flex: 1; min-width: 200px;">
+                    <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 0.5rem 0;">${complaint.title}</h3>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                      <span style="background: ${backgroundColor}; color: ${textColor}; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                        ${complaint.category}
+                      </span>
+                      <span class="status-badge" style="background: ${getStatusColor(complaint.status)}; color: white;">
+                        ${getStatusLabel(complaint.status)}
+                      </span>
+                    </div>
+                  </div>
+                  <div style="text-align: right;">
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0;">👤 ${complaint.residentName}</p>
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0.25rem 0 0 0;">📅 ${new Date(complaint.createdAt).toLocaleDateString()}</p>
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${primaryColor}; margin: 0.25rem 0 0 0; font-weight: 600;">👍 ${complaint.upvotes} votes</p>
+                  </div>
+                </div>
+                
+                <p style="font-size: ${baseSize}px; color: ${textColor}; margin: 0 0 1.5rem 0; line-height: 1.6;">${complaint.description}</p>
+                
+                <div>
+                  <label for="status-${complaint.id}" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Update Status</label>
+                  <select id="status-${complaint.id}" onchange="handleStatusUpdate('${complaint.id}', this.value)" value="${complaint.status}" style="width: 100%; max-width: 300px; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                    ${statusTypes.map(st => `<option value="${st.value}" ${complaint.status === st.value ? 'selected' : ''}>${st.label}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderReportsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const reportData = generateReportData();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Complaint Reports & Analytics</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">Report Filters</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+              <div>
+                <label for="report-status-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Status</label>
+                <select id="report-status-filter" onchange="setReportStatusFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${reportStatusFilter === 'all' ? 'selected' : ''}>All Statuses</option>
+                  ${statusTypes.map(st => `<option value="${st.value}" ${reportStatusFilter === st.value ? 'selected' : ''}>${st.label}</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label for="report-date-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Date Range</label>
+                <select id="report-date-filter" onchange="setReportDateFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${reportDateFilter === 'all' ? 'selected' : ''}>All Time</option>
+                  <option value="today" ${reportDateFilter === 'today' ? 'selected' : ''}>Today</option>
+                  <option value="week" ${reportDateFilter === 'week' ? 'selected' : ''}>Last 7 Days</option>
+                  <option value="month" ${reportDateFilter === 'month' ? 'selected' : ''}>Last 30 Days</option>
+                  <option value="year" ${reportDateFilter === 'year' ? 'selected' : ''}>Last Year</option>
+                  <option value="custom" ${reportDateFilter === 'custom' ? 'selected' : ''}>Custom Range</option>
+                </select>
+              </div>
+            </div>
+
+            ${reportDateFilter === 'custom' ? `
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                <div>
+                  <label for="report-start-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Start Date</label>
+                  <input type="date" id="report-start-date" value="${reportStartDate}" onchange="setReportStartDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+                <div>
+                  <label for="report-end-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">End Date</label>
+                  <input type="date" id="report-end-date" value="${reportEndDate}" onchange="setReportEndDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+            <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); text-align: center;">
+              <p style="font-size: ${baseSize * 0.9}px; color: ${secondaryColor}; margin: 0 0 0.5rem 0; font-weight: 500;">Total Complaints</p>
+              <p style="font-size: ${baseSize * 2.5}px; font-weight: 700; margin: 0; color: ${primaryColor};">${reportData.total}</p>
+            </div>
+
+            ${statusTypes.map(st => `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); text-align: center;">
+                <p style="font-size: ${baseSize * 0.9}px; color: ${secondaryColor}; margin: 0 0 0.5rem 0; font-weight: 500;">${st.label}</p>
+                <p style="font-size: ${baseSize * 2.5}px; font-weight: 700; margin: 0; color: ${st.color};">${reportData.statusCounts[st.value]}</p>
+              </div>
+            `).join('')}
+          </div>
+
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1.5rem 0; text-align: center;">Complaints by Status</h3>
+            <div style="display: flex; justify-content: center;">
+              <canvas id="report-chart" width="400" height="400"></canvas>
+            </div>
+            
+            <div style="margin-top: 2rem;">
+              <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">Legend</h4>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem;">
+                ${statusTypes.map(st => `
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div style="width: 20px; height: 20px; background: ${st.color}; border-radius: 4px;"></div>
+                    <span style="font-size: ${baseSize * 0.9}px;">${st.label}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminAnnouncements(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const announcements = getAnnouncements();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Announcements</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">${editingAnnouncement ? 'Edit Announcement' : 'Create New Announcement'}</h3>
+            
+            <form id="announcement-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="announcement-title" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Title</label>
+                <input type="text" id="announcement-title" name="title" required value="${editingAnnouncement ? editingAnnouncement.title : ''}" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="announcement-content" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Content</label>
+                <textarea id="announcement-content" name="content" required rows="4" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box; resize: vertical;">${editingAnnouncement ? editingAnnouncement.content : ''}</textarea>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div>
+                  <label for="announcement-priority" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Priority</label>
+                  <select id="announcement-priority" name="priority" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                    <option value="high" ${editingAnnouncement && editingAnnouncement.priority === 'high' ? 'selected' : ''}>High</option>
+                    <option value="medium" ${editingAnnouncement && editingAnnouncement.priority === 'medium' ? 'selected' : ''}>Medium</option>
+                    <option value="low" ${editingAnnouncement && editingAnnouncement.priority === 'low' ? 'selected' : ''}>Low</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="announcement-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Date</label>
+                  <input type="date" id="announcement-date" name="date" required value="${editingAnnouncement ? editingAnnouncement.date : new Date().toISOString().split('T')[0]}" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 1rem;">
+                <button type="submit" style="flex: 1; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                  ${editingAnnouncement ? 'Update Announcement' : 'Create Announcement'}
+                </button>
+                ${editingAnnouncement ? `
+                  <button type="button" onclick="cancelEditAnnouncement()" style="padding: 1rem 1.5rem; background: ${backgroundColor}; color: ${textColor}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Cancel
+                  </button>
+                ` : ''}
+              </div>
+            </form>
+          </div>
+
+          <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1rem 0;">Existing Announcements (${announcements.length})</h3>
+          
+          <div style="display: grid; gap: 1rem;">
+            ${announcements.length === 0 ? `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0;">No announcements yet. Create your first announcement above.</p>
+              </div>
+            ` : announcements.map(announcement => {
+              const priorityColors = {
+                high: '#f87171',
+                medium: '#fb923c',
+                low: '#60a5fa'
+              };
+              
+              return `
+                <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                  <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 1;">
+                      <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 0.5rem 0;">${announcement.title}</h4>
+                      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="background: ${priorityColors[announcement.priority]}; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                          ${announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)} Priority
+                        </span>
+                        <span style="background: ${backgroundColor}; color: ${textColor}; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                          📅 ${new Date(announcement.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                      <button onclick="startEditAnnouncement('${announcement.id}')" style="padding: 0.5rem 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                        Edit
+                      </button>
+                      <button onclick="handleDeleteAnnouncement('${announcement.id}')" style="padding: 0.5rem 1rem; background: #f87171; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <p style="font-size: ${baseSize}px; color: ${textColor}; margin: 0; line-height: 1.6;">${announcement.content}</p>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminOfficials(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const officials = getOfficials();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Barangay Officials</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">${editingOfficial ? 'Edit Official' : 'Add New Official'}</h3>
+            
+            <form id="official-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="official-name" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Full Name</label>
+                <input type="text" id="official-name" name="name" required value="${editingOfficial ? editingOfficial.name : ''}" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="official-position" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Position</label>
+                <input type="text" id="official-position" name="position" required value="${editingOfficial ? editingOfficial.position : ''}" placeholder="e.g., Barangay Captain, Kagawad" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="official-contact" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Contact Number</label>
+                <input type="tel" id="official-contact" name="contact" required value="${editingOfficial ? editingOfficial.contact : ''}" placeholder="09XX-XXX-XXXX" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="display: flex; gap: 1rem;">
+                <button type="submit" style="flex: 1; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                  ${editingOfficial ? 'Update Official' : 'Add Official'}
+                </button>
+                ${editingOfficial ? `
+                  <button type="button" onclick="cancelEditOfficial()" style="padding: 1rem 1.5rem; background: ${backgroundColor}; color: ${textColor}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Cancel
+                  </button>
+                ` : ''}
+              </div>
+            </form>
+          </div>
+
+          <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1rem 0;">Current Officials (${officials.length})</h3>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+            ${officials.length === 0 ? `
+              <div style="grid-column: 1 / -1; background: ${surfaceColor}; border-radius: 12px; padding: 2rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0;">No officials added yet. Add your first official above.</p>
+              </div>
+            ` : officials.map(official => `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div style="margin-bottom: 1rem;">
+                  <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 0.25rem 0;">${official.name}</h4>
+                  <p style="font-size: ${baseSize * 0.9}px; color: ${primaryColor}; font-weight: 600; margin: 0;">${official.position}</p>
+                </div>
+                
+                <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; margin: 0 0 1rem 0;">
+                  📞 ${official.contact}
+                </p>
+                
+                <div style="display: flex; gap: 0.5rem;">
+                  <button onclick="startEditOfficial('${official.id}')" style="flex: 1; padding: 0.75rem; background: ${primaryColor}; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                    Edit
+                  </button>
+                  <button onclick="handleDeleteOfficial('${official.id}')" style="flex: 1; padding: 0.75rem; background: #f87171; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                    Remove
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminHotlines(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const hotlines = getHotlines();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Emergency Hotlines</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">${editingHotline ? 'Edit Hotline' : 'Add New Hotline'}</h3>
+            
+            <form id="hotline-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-service" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Service Name</label>
+                <input type="text" id="hotline-service" name="service_name" required value="${editingHotline ? editingHotline.serviceName : ''}" placeholder="e.g., Barangay Emergency, Fire Department" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-phone" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Phone Number</label>
+                <input type="tel" id="hotline-phone" name="phone_number" required value="${editingHotline ? editingHotline.phoneNumber : ''}" placeholder="09XX-XXX-XXXX or XXX-XXXX" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-description" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+                <textarea id="hotline-description" name="description" required rows="2" placeholder="Brief description of the service" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box; resize: vertical;">${editingHotline ? editingHotline.description : ''}</textarea>
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-hours" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Available Hours</label>
+                <input type="text" id="hotline-hours" name="available_hours" required value="${editingHotline ? editingHotline.availableHours : ''}" placeholder="e.g., 24/7, Mon-Fri 8AM-5PM" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="display: flex; gap: 1rem;">
+                <button type="submit" style="flex: 1; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                  ${editingHotline ? 'Update Hotline' : 'Add Hotline'}
+                </button>
+                ${editingHotline ? `
+                  <button type="button" onclick="cancelEditHotline()" style="padding: 1rem 1.5rem; background: ${backgroundColor}; color: ${textColor}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Cancel
+                  </button>
+                ` : ''}
+              </div>
+            </form>
+          </div>
+
+          <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1rem 0;">Active Hotlines (${hotlines.length})</h3>
+          
+          <div style="display: grid; gap: 1rem;">
+            ${hotlines.length === 0 ? `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0;">No hotlines added yet. Add your first emergency hotline above.</p>
+              </div>
+            ` : hotlines.map(hotline => `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap;">
+                  <div style="flex: 1;">
+                    <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 0.5rem 0;">🚨 ${hotline.serviceName}</h4>
+                    <p style="font-size: ${baseSize * 1.2}px; color: ${primaryColor}; font-weight: 700; margin: 0 0 0.5rem 0;">📞 ${hotline.phoneNumber}</p>
+                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; margin: 0 0 0.5rem 0;">${hotline.description}</p>
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0;">⏰ ${hotline.availableHours}</p>
+                  </div>
+                  <div style="display: flex; gap: 0.5rem;">
+                    <button onclick="startEditHotline('${hotline.id}')" style="padding: 0.5rem 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                      Edit
+                    </button>
+                    <button onclick="handleDeleteHotline('${hotline.id}')" style="padding: 0.5rem 1rem; background: #f87171; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderComplaintsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, sortedComplaints) {
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1rem 0;">Community Complaints</h2>
+          <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0 0 2rem 0;">View and support issues in our barangay. Vote to prioritize complaints.</p>
+          
+          ${sortedComplaints.length === 0 ? `
+            <div style="background: ${surfaceColor}; border-radius: 12px; padding: 3rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+              <p style="font-size: ${baseSize * 1.1}px; color: ${secondaryColor}; margin: 0;">No complaints submitted yet. Be the first to submit one!</p>
+            </div>
+          ` : `
+            <div style="display: grid; gap: 1.5rem;">
+              ${sortedComplaints.map(complaint => {
+                const hasVoted = currentUser && hasUserVoted(complaint.id, currentUser.id);
+                
+                return `
+                  <div class="complaint-card" style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                      <div style="flex: 1; min-width: 200px;">
+                        <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 0.5rem 0;">${complaint.title}</h3>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                          <span style="background: ${backgroundColor}; color: ${textColor}; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                            ${complaint.category}
+                          </span>
+                          <span class="status-badge" style="background: ${getStatusColor(complaint.status)}; color: white;">
+                            ${getStatusLabel(complaint.status)}
+                          </span>
+                        </div>
+                      </div>
+                      <div style="text-align: right;">
+                        <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0;">👤 ${complaint.residentName}</p>
+                        <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0.25rem 0 0 0;">📅 ${new Date(complaint.createdAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    
+                    <p style="font-size: ${baseSize}px; color: ${textColor}; margin: 0 0 1.5rem 0; line-height: 1.6;">${complaint.description}</p>
+                    
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                      <button 
+                        class="upvote-button" 
+                        onclick="handleUpvote('${complaint.id}')" 
+                        ${hasVoted || !currentUser ? 'disabled' : ''}
+                        style="padding: 0.75rem 1.5rem; background: ${hasVoted ? backgroundColor : primaryColor}; color: ${hasVoted ? secondaryColor : 'white'}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: ${hasVoted || !currentUser ? 'not-allowed' : 'pointer'}; display: flex; align-items: center; gap: 0.5rem; font-family: ${fontFamily};">
+                        👍 ${hasVoted ? 'Voted' : 'Upvote'}
+                      </button>
+                      <span style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${primaryColor};">
+                        ${complaint.upvotes} vote${complaint.upvotes !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderSubmitTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, formTitle, submitButtonText) {
+      return `
+        <div style="max-width: 600px; margin: 0 auto;">
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1rem 0;">${formTitle}</h2>
+          <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0 0 2rem 0;">Help us improve our barangay by reporting issues or concerns.</p>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <form id="complaint-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="complaint-title" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Complaint Title</label>
+                <input type="text" id="complaint-title" name="title" required placeholder="Brief summary of your complaint" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="complaint-category" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Category</label>
+                <select id="complaint-category" name="category" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="">Select a category</option>
+                  ${categories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
+                </select>
+              </div>
+
+              <div style="margin-bottom: 2rem;">
+                <label for="complaint-description" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+                <textarea id="complaint-description" name="description" required rows="6" placeholder="Please provide details about your complaint..." style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box; resize: vertical;"></textarea>
+              </div>
+
+              <button type="submit" style="width: 100%; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize * 1.1}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                ${submitButtonText}
+              </button>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAnnouncementsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbAnnouncements) {
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1rem 0;">Barangay Announcements</h2>
+          <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0 0 2rem 0;">Stay informed with the latest news and updates from our barangay.</p>
+          
+          ${dbAnnouncements.length === 0 ? `
+            <div style="background: ${surfaceColor}; border-radius: 12px; padding: 3rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+              <p style="font-size: ${baseSize * 1.1}px; color: ${secondaryColor}; margin: 0;">No announcements available at this time.</p>
+            </div>
+          ` : `
+            <div style="display: grid; gap: 1.5rem;">
+              ${dbAnnouncements.map(announcement => {
+                const priorityColors = {
+                  high: '#f87171',
+                  medium: '#fb923c',
+                  low: '#60a5fa'
+                };
+                
+                return `
+                  <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid ${priorityColors[announcement.priority]};">
+                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                      <div style="flex: 1;">
+                        <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 0.5rem 0;">📢 ${announcement.title}</h3>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                          <span style="background: ${priorityColors[announcement.priority]}; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                            ${announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)} Priority
+                          </span>
+                          <span style="background: ${backgroundColor}; color: ${textColor}; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                            📅 ${new Date(announcement.date).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <p style="font-size: ${baseSize}px; color: ${textColor}; margin: 0; line-height: 1.6; white-space: pre-wrap;">${announcement.content}</p>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderOfficialsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbOfficials) {
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1rem 0;">Barangay Officials</h2>
+          <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0 0 2rem 0;">Meet the officials serving our community.</p>
+          
+          ${dbOfficials.length === 0 ? `
+            <div style="background: ${surfaceColor}; border-radius: 12px; padding: 3rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+              <p style="font-size: ${baseSize * 1.1}px; color: ${secondaryColor}; margin: 0;">Official information will be available soon.</p>
+            </div>
+          ` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
+              ${dbOfficials.map(official => `
+                <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); text-align: center;">
+                  <div style="width: 80px; height: 80px; background: ${backgroundColor}; border-radius: 50%; margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; font-size: ${baseSize * 2}px;">
+                    👤
+                  </div>
+                  <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 0.25rem 0;">${official.name}</h3>
+                  <p style="font-size: ${baseSize * 0.9}px; color: ${primaryColor}; font-weight: 600; margin: 0 0 1rem 0;">${official.position}</p>
+                  <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; margin: 0;">
+                    📞 ${official.contact}
+                  </p>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderHotlinesTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbHotlines, isAdmin) {
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1rem 0;">Emergency Hotlines</h2>
+          <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0 0 2rem 0;">Important contact numbers for emergencies and assistance.</p>
+          
+          ${dbHotlines.length === 0 ? `
+            <div style="background: ${surfaceColor}; border-radius: 12px; padding: 3rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+              <p style="font-size: ${baseSize * 1.1}px; color: ${secondaryColor}; margin: 0;">Emergency hotlines will be available soon.</p>
+            </div>
+          ` : `
+            <div style="display: grid; gap: 1rem;">
+              ${dbHotlines.map(hotline => `
+                <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid #f87171;">
+                  <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 0.5rem 0;">🚨 ${hotline.serviceName}</h3>
+                  <a href="tel:${hotline.phoneNumber}" style="font-size: ${baseSize * 1.3}px; color: ${primaryColor}; font-weight: 700; margin: 0 0 0.5rem 0; display: block; text-decoration: none;">
+                    📞 ${hotline.phoneNumber}
+                  </a>
+                  <p style="font-size: ${baseSize * 0.95}px; color: ${textColor}; margin: 0 0 0.5rem 0;">${hotline.description}</p>
+                  <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0;">⏰ ${hotline.availableHours}</p>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderUI() {
+      if (!currentUser) {
+        renderAuthScreen();
+        return;
+      }
+
+      if (isLoading) {
+        document.getElementById('app').innerHTML = renderLoadingScreen();
+        return;
+      }
+
+      const customFont = config.font_family;
+      const baseFontStack = 'system-ui, -apple-system, sans-serif';
+      const fontFamily = `${customFont}, ${baseFontStack}`;
+      const baseSize = config.font_size;
+
+      const backgroundColor = config.background_color;
+      const surfaceColor = config.surface_color;
+      const textColor = config.text_color;
+      const primaryColor = config.primary_action_color;
+      const secondaryColor = config.secondary_action_color;
+
+      const barangayName = config.barangay_name;
+      const welcomeMessage = config.welcome_message;
+      const formTitle = config.form_title;
+      const submitButtonText = config.submit_button_text;
+
+      const complaints = getComplaints();
+      const sortedComplaints = [...complaints].sort((a, b) => b.upvotes - a.upvotes);
+      
+      const dbAnnouncements = getAnnouncements();
+      const dbOfficials = getOfficials();
+      const dbHotlines = getHotlines();
+      
+      let filteredComplaints = complaints;
+      if (statusFilter !== 'all') {
+        filteredComplaints = filteredComplaints.filter(c => c.status === statusFilter);
+      }
+      if (categoryFilter !== 'all') {
+        filteredComplaints = filteredComplaints.filter(c => c.category === categoryFilter);
+      }
+      filteredComplaints = filterComplaintsByDate(filteredComplaints, dateFilter, startDate, endDate);
+
+      const isAdmin = currentUser && currentUser.userType === 'admin';
+
+      const appHtml = `
+        <div style="background: ${backgroundColor}; min-height: 100%; font-family: ${fontFamily}; color: ${textColor};">
+          <header style="background: ${surfaceColor}; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); padding: 1.5rem 1rem;">
+            <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              <div>
+                <h1 style="font-size: ${baseSize * 1.75}px; font-weight: 700; margin: 0 0 0.5rem 0;">${barangayName}</h1>
+                <p style="font-size: ${baseSize * 0.9}px; margin: 0; color: ${secondaryColor};">${welcomeMessage}</p>
+              </div>
+              <div style="text-align: right;">
+                <p style="font-size: ${baseSize * 0.9}px; margin: 0 0 0.25rem 0; font-weight: 500;">Welcome, ${currentUser.fullName}</p>
+                ${isAdmin ? `<p style="font-size: ${baseSize * 0.8}px; margin: 0 0 0.5rem 0; color: ${primaryColor}; font-weight: 600;">🔑 Administrator</p>` : ''}
+                <button onclick="handleLogout()" style="padding: 0.5rem 1rem; background: ${backgroundColor}; border: 2px solid ${secondaryColor}; color: ${textColor}; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                  Logout
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <nav style="background: ${surfaceColor}; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); padding: 0 1rem; overflow-x: auto;">
+            <div style="max-width: 1200px; margin: 0 auto; display: flex; gap: 0.5rem;">
+              ${isAdmin ? `
+                <button class="tab-button" onclick="switchTab('admin')" style="padding: 1rem 1.5rem; border: none; background: ${currentTab === 'admin' ? backgroundColor : 'transparent'}; color: ${currentTab === 'admin' ? primaryColor : textColor}; font-weight: ${currentTab === 'admin' ? '600' : '500'}; font-size: ${baseSize}px; cursor: pointer; border-bottom: 3px solid ${currentTab === 'admin' ? primaryColor : 'transparent'}; font-family: ${fontFamily}; white-space: nowrap;">
+                  ⚙️ Admin Dashboard
+                </button>
+              ` : ''}
+              <button class="tab-button" onclick="switchTab('complaints')" style="padding: 1rem 1.5rem; border: none; background: ${currentTab === 'complaints' ? backgroundColor : 'transparent'}; color: ${currentTab === 'complaints' ? primaryColor : textColor}; font-weight: ${currentTab === 'complaints' ? '600' : '500'}; font-size: ${baseSize}px; cursor: pointer; border-bottom: 3px solid ${currentTab === 'complaints' ? primaryColor : 'transparent'}; font-family: ${fontFamily}; white-space: nowrap;">
+                📋 Complaints
+              </button>
+              ${!isAdmin ? `
+                <button class="tab-button" onclick="switchTab('submit')" style="padding: 1rem 1.5rem; border: none; background: ${currentTab === 'submit' ? backgroundColor : 'transparent'}; color: ${currentTab === 'submit' ? primaryColor : textColor}; font-weight: ${currentTab === 'submit' ? '600' : '500'}; font-size: ${baseSize}px; cursor: pointer; border-bottom: 3px solid ${currentTab === 'submit' ? primaryColor : 'transparent'}; font-family: ${fontFamily}; white-space: nowrap;">
+                  ✏️ Submit
+                </button>
+              ` : ''}
+              <button class="tab-button" onclick="switchTab('announcements')" style="padding: 1rem 1.5rem; border: none; background: ${currentTab === 'announcements' ? backgroundColor : 'transparent'}; color: ${currentTab === 'announcements' ? primaryColor : textColor}; font-weight: ${currentTab === 'announcements' ? '600' : '500'}; font-size: ${baseSize}px; cursor: pointer; border-bottom: 3px solid ${currentTab === 'announcements' ? primaryColor : 'transparent'}; font-family: ${fontFamily}; white-space: nowrap;">
+                📢 Announcements
+              </button>
+              <button class="tab-button" onclick="switchTab('officials')" style="padding: 1rem 1.5rem; border: none; background: ${currentTab === 'officials' ? backgroundColor : 'transparent'}; color: ${currentTab === 'officials' ? primaryColor : textColor}; font-weight: ${currentTab === 'officials' ? '600' : '500'}; font-size: ${baseSize}px; cursor: pointer; border-bottom: 3px solid ${currentTab === 'officials' ? primaryColor : 'transparent'}; font-family: ${fontFamily}; white-space: nowrap;">
+                👥 Officials
+              </button>
+              <button class="tab-button" onclick="switchTab('hotlines')" style="padding: 1rem 1.5rem; border: none; background: ${currentTab === 'hotlines' ? backgroundColor : 'transparent'}; color: ${currentTab === 'hotlines' ? primaryColor : textColor}; font-weight: ${currentTab === 'hotlines' ? '600' : '500'}; font-size: ${baseSize}px; cursor: pointer; border-bottom: 3px solid ${currentTab === 'hotlines' ? primaryColor : 'transparent'}; font-family: ${fontFamily}; white-space: nowrap;">
+                🚨 Emergency
+              </button>
+            </div>
+          </nav>
+
+          <main style="max-width: 1200px; margin: 0 auto; padding: 2rem 1rem;">
+            ${currentTab === 'admin' && isAdmin ? renderAdminDashboard(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) : ''}
+            ${currentTab === 'complaints' ? renderComplaintsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, sortedComplaints) : ''}
+            ${currentTab === 'submit' ? renderSubmitTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, formTitle, submitButtonText) : ''}
+            ${currentTab === 'announcements' ? renderAnnouncementsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbAnnouncements) : ''}
+            ${currentTab === 'officials' ? renderOfficialsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbOfficials) : ''}
+            ${currentTab === 'hotlines' ? renderHotlinesTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbHotlines, isAdmin) : ''}
+          </main>
+        </div>
+      `;
+
+      document.getElementById('app').innerHTML = appHtml;
+      attachEventListeners();
+      
+      if (currentTab === 'admin' && adminTab === 'reports') {
+        setTimeout(() => {
+          const reportData = generateReportData();
+          drawPieChart('report-chart', reportData);
+        }, 100);
+      }
+    }
+
+    function attachEventListeners() {
+      if (currentTab === 'submit') {
+        const form = document.getElementById('complaint-form');
+        if (form) {
+          form.addEventListener('submit', handleComplaintSubmit);
+        }
+      }
+
+      if (currentTab === 'admin' && currentUser && currentUser.userType === 'admin') {
+        if (adminTab === 'announcements') {
+          const announcementForm = document.getElementById('announcement-form');
+          if (announcementForm) {
+            announcementForm.addEventListener('submit', handleAnnouncementSubmit);
+          }
+        } else if (adminTab === 'officials') {
+          const officialForm = document.getElementById('official-form');
+          if (officialForm) {
+            officialForm.addEventListener('submit', handleOfficialSubmit);
+          }
+        } else if (adminTab === 'hotlines') {
+          const hotlineForm = document.getElementById('hotline-form');
+          if (hotlineForm) {
+            hotlineForm.addEventListener('submit', handleHotlineSubmit);
+          }
+        }
+      }
+    }
+
+    // ========== GLOBAL FUNCTIONS ==========
+    function switchTab(tab) {
+      currentTab = tab;
+      renderUI();
+    }
+
+    function switchAuthMode(mode) {
+      authMode = mode;
+      renderUI();
+    }
+
+    function switchUserType(type) {
+      userType = type;
+      renderUI();
+    }
+
+    function switchAdminTab(tab) {
+      adminTab = tab;
+      editingAnnouncement = null;
+      editingOfficial = null;
+      editingHotline = null;
+      renderUI();
+    }
+
+    function setStatusFilter(filter) {
+      statusFilter = filter;
+      renderUI();
+    }
+
+    function setCategoryFilter(filter) {
+      categoryFilter = filter;
+      renderUI();
+    }
+
+    function setDateFilter(filter) {
+      dateFilter = filter;
+      if (filter !== 'custom') {
+        startDate = '';
+        endDate = '';
+      }
+      renderUI();
+    }
+
+    function setStartDate(date) {
+      startDate = date;
+      renderUI();
+    }
+
+    function setEndDate(date) {
+      endDate = date;
+      renderUI();
+    }
+
+    function setReportStatusFilter(filter) {
+      reportStatusFilter = filter;
+      renderUI();
+    }
+
+    function setReportDateFilter(filter) {
+      reportDateFilter = filter;
+      if (filter !== 'custom') {
+        reportStartDate = '';
+        reportEndDate = '';
+      }
+      renderUI();
+    }
+
+    function setReportStartDate(date) {
+      reportStartDate = date;
+      renderUI();
+    }
+
+    function setReportEndDate(date) {
+      reportEndDate = date;
+      renderUI();
+    }
+
+    window.switchTab = switchTab;
+    window.switchAuthMode = switchAuthMode;
+    window.switchUserType = switchUserType;
+    window.switchAdminTab = switchAdminTab;
+    window.setStatusFilter = setStatusFilter;
+    window.setCategoryFilter = setCategoryFilter;
+    window.setDateFilter = setDateFilter;
+    window.setStartDate = setStartDate;
+    window.setEndDate = setEndDate;
+    window.setReportStatusFilter = setReportStatusFilter;
+    window.setReportDateFilter = setReportDateFilter;
+    window.setReportStartDate = setReportStartDate;
+    window.setReportEndDate = setReportEndDate;
+    window.handleUpvote = handleUpvote;
+    window.handleLogout = handleLogout;
+    window.handleStatusUpdate = handleStatusUpdate;
+    window.handleDeleteAnnouncement = handleDeleteAnnouncement;
+    window.handleDeleteOfficial = handleDeleteOfficial;
+    window.handleDeleteHotline = handleDeleteHotline;
+    window.startEditAnnouncement = startEditAnnouncement;
+    window.cancelEditAnnouncement = cancelEditAnnouncement;
+    window.startEditOfficial = startEditOfficial;
+    window.cancelEditOfficial = cancelEditOfficial;
+    window.startEditHotline = startEditHotline;
+    window.cancelEditHotline = cancelEditHotline;
+
+    // Initialize
+    renderUI();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a6fb3116005bc5b',t:'MTc2NDU2MTg1Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
