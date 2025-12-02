@@ -611,7 +611,7 @@ async function handleUpvote(complaintId) {
   
   try {
     console.log('Sending vote to API...');
-    const result = await apiPost('Votes', voteData);
+      const result = await apiPost('create', 'votes', voteData);
     console.log('API response:', result);
     
     if (result.success) {
