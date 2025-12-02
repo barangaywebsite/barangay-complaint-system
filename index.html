@@ -201,29 +201,40 @@ async function apiPost(action, type, record = null, id = null) {
 
 
     // ========== DATA FUNCTIONS ==========
-    async function loadAllData() {
-      isLoading = true;
-      renderUI();
-      
-      const [users, complaints, votes, announcements, officials, hotlines] = await Promise.all([
-        apiGet('Users'),
-        apiGet('Complaints'),
-        apiGet('Votes'),
-        apiGet('Announcements'),
-        apiGet('Officials'),
-        apiGet('Hotlines')
-      ]);
-      
-      cachedUsers = users;
-      cachedComplaints = complaints;
-      cachedVotes = votes;
-      cachedAnnouncements = announcements.sort((a, b) => new Date(b.date) - new Date(a.date));
-      cachedOfficials = officials;
-      cachedHotlines = hotlines;
-      
-      isLoading = false;
-      renderUI();
-    }
+async function loadAllData() {
+  console.log('=== LOADING ALL DATA ===');
+  isLoading = true;
+  renderUI();
+  
+  const [users, complaints, votes, announcements, officials, hotlines] = await Promise.all([
+    apiGet('Users'),
+    apiGet('Complaints'),
+    apiGet('Votes'),
+    apiGet('Announcements'),
+    apiGet('Officials'),
+    apiGet('Hotlines')
+  ]);
+  
+  console.log('Users loaded:', users.length);
+  console.log('Complaints loaded:', complaints.length);
+  console.log('Votes loaded:', votes.length);
+  console.log('Announcements loaded:', announcements.length);
+  console.log('Officials loaded:', officials.length);
+  console.log('Hotlines loaded:', hotlines.length);
+  
+  cachedUsers = users;
+  cachedComplaints = complaints;
+  cachedVotes = votes;
+  cachedAnnouncements = announcements.sort((a, b) => new Date(b.date) - new Date(a.date));
+  cachedOfficials = officials;
+  cachedHotlines = hotlines;
+  
+  console.log('Cached complaints:', cachedComplaints);
+  console.log('======================');
+  
+  isLoading = false;
+  renderUI();
+}
 
     function getUsers() {
       return cachedUsers;
