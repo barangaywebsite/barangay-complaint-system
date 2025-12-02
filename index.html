@@ -347,6 +347,31 @@ async function apiPost(action, type, record = null, id = null) {
       });
     }
 
+   async function loadComplaintsForAdmin() {
+  console.log('=== LOADING ADMIN COMPLAINTS ===');
+  
+  try {
+    const complaints = await apiGet('complaints');
+    console.log('Raw complaints from API:', complaints);
+    console.log('Number of complaints:', complaints.length);
+    console.log('Current user:', currentUser);
+    
+    // Check if complaints is actually an array
+    if (!Array.isArray(complaints)) {
+      console.error('❌ Complaints is not an array:', complaints);
+      return [];
+    }
+    
+    // Don't filter for admin - show ALL complaints
+    console.log('Displaying all complaints for admin');
+    return complaints;
+    
+  } catch (error) {
+    console.error('❌ Error loading complaints:', error);
+    return [];
+  }
+}
+
     // ========== EVENT HANDLERS ==========
 async function handleLogin(e) {
   e.preventDefault();
