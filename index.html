@@ -160,7 +160,6 @@ async function apiGet(type) {
     } else {
       console.warn('⚠️ Data is not an array:', typeof data);
     }
-    
     console.log('======================');
     return data;
   } catch (error) {
@@ -1782,9 +1781,6 @@ async function handleUpvote(complaintId) {
       const submitButtonText = config.submit_button_text;
 
       const complaints = getComplaintsWithVotes();
-      complaints.forEach(complaint => {
-      const voteCount = complaint.voteCount; // Already calculated!
-      const hasVoted = hasUserVoted(complaint.id, currentUser?.id);
       
       const dbAnnouncements = getAnnouncements();
       const dbOfficials = getOfficials();
@@ -1865,8 +1861,8 @@ async function handleUpvote(complaintId) {
           const reportData = generateReportData();
           drawPieChart('report-chart', reportData);
         }, 100);
-
-                         }
+      }}
+                         
     function attachEventListeners() {
       if (currentTab === 'submit') {
         const form = document.getElementById('complaint-form');
