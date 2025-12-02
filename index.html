@@ -353,12 +353,16 @@ async function handleLogin(e) {
   
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
-  const adminId = document.getElementById('login-adminid').value.trim();
+  
+  // Safely check if admin ID field exists (only shown for admin login)
+  const adminIdElement = document.getElementById('login-adminid');
+  const adminId = adminIdElement ? adminIdElement.value.trim() : '';
   
   console.log('=== LOGIN DEBUG ===');
   console.log('Entered username:', username);
   console.log('Entered password:', password);
   console.log('Entered adminId:', `"${adminId}"`);
+  console.log('Admin ID field exists:', !!adminIdElement);
   
   if (!username || !password) {
     showToast('Please enter username and password', 'error');
@@ -376,7 +380,7 @@ async function handleLogin(e) {
       console.log('--- Checking user:', u.username, '---');
       console.log('DB username:', u.username, '| Match:', u.username.toString().toLowerCase() === username.toLowerCase());
       console.log('DB password:', u.password, '| Match:', u.password.toString() === password);
-      console.log('DB adminId:', `"${u.adminId}"`, '| Type:', typeof u.adminId, '| Empty:', u.adminId === '' || !u.adminId);
+      console.log('DB adminId:', `"${u.adminId}"`, '| Type:', typeof u.adminId);
       console.log('DB userType:', u.userType);
       
       const usernameMatch = u.username.toString().toLowerCase() === username.toLowerCase();
@@ -387,14 +391,21 @@ async function handleLogin(e) {
       const dbAdminId = u.adminId ? u.adminId.toString().trim() : '';
       const enteredAdminId = adminId.trim();
       
-      if (dbAdminId === '') {
-        // Database has empty adminId - allow login regardless of what user enters
+      if (!adminIdElement) {
+        // Resident login - no admin ID field, so ignore admin ID check
         adminIdMatch = true;
-        console.log('✓ Admin ID empty in DB - auto match');
+        console.log('✓ Resident login - skip admin ID check');
+      } else if (dbAdminId === '' && enteredAdminId === '') {
+        // Both empty - match
+        adminIdMatch = true;
+        console.log('✓ Both admin IDs empty - match');
+      } else if (dbAdminId === enteredAdminId) {
+        // Exact match
+        adminIdMatch = true;
+        console.log('✓ Admin IDs match');
       } else {
-        // Database has an adminId - must match exactly
-        adminIdMatch = dbAdminId === enteredAdminId;
-        console.log(`Admin ID check: "${dbAdminId}" === "${enteredAdminId}" = ${adminIdMatch}`);
+        adminIdMatch = false;
+        console.log(`❌ Admin ID mismatch: "${dbAdminId}" !== "${enteredAdminId}"`);
       }
       
       const finalMatch = usernameMatch && passwordMatch && adminIdMatch;
