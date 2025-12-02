@@ -580,26 +580,18 @@ if (user.userType === 'admin') {
     }
 
 async function handleUpvote(complaintId) {
-  console.log('=== UPVOTE CLICKED ===');
-  console.log('Complaint ID:', complaintId);
-  console.log('Current User:', currentUser);
-  
   if (!currentUser) {
-    console.error('❌ No user logged in');
     showToast('Please login to upvote', 'error');
     return;
   }
   
-  console.log('Checking if user already voted...');
   const alreadyVoted = hasUserVoted(complaintId, currentUser.id);
-  console.log('Already voted:', alreadyVoted);
   
   if (alreadyVoted) {
     showToast('You have already upvoted this complaint', 'error');
     return;
   }
   
-  console.log('Creating vote record...');
   const voteData = {
     id: Date.now().toString(),
     complaintId: complaintId,
@@ -607,25 +599,21 @@ async function handleUpvote(complaintId) {
     createdAt: new Date().toISOString()
   };
   
-  console.log('Vote data:', voteData);
-  
   try {
-    console.log('Sending vote to API...');
-      const result = await apiPost('create', 'votes', voteData);
-    console.log('API response:', result);
+    const result = await apiPost('create', 'votes', voteData);
     
     if (result.success) {
-      console.log('✅ Vote successful!');
-      showToast('Upvoted successfully!', 'success');
+      // Add vote to cache immediately (no loading needed)
+      cachedVotes.push(voteData);
       
-      // Reload data to update vote count
-      await loadAllData();
+      // Re-render UI immediately with updated data
+      renderUI();
+      
+      showToast('Upvoted successfully!', 'success');
     } else {
-      console.error('❌ Vote failed:', result);
       showToast('Failed to upvote. Please try again.', 'error');
     }
   } catch (error) {
-    console.error('❌ Upvote error:', error);
     showToast('An error occurred while upvoting', 'error');
   }
 }
@@ -1793,8 +1781,10 @@ async function handleUpvote(complaintId) {
       const formTitle = config.form_title;
       const submitButtonText = config.submit_button_text;
 
-      const complaints = getComplaints();
-      const sortedComplaints = [...complaints].sort((a, b) => b.upvotes - a.upvotes);
+      const complaints = getComplaintsWithVotes();
+      complaints.forEach(complaint => {
+      const voteCount = complaint.voteCount; // Already calculated!
+      const hasVoted = hasUserVoted(complaint.id, currentUser?.id);
       
       const dbAnnouncements = getAnnouncements();
       const dbOfficials = getOfficials();
@@ -1905,6 +1895,21 @@ async function handleUpvote(complaintId) {
         }
       }
     }
+
+     function getComplaintsWithVotes() {
+       const complaints = getComplaints();
+  
+    // Calculate vote count for each complaint
+       const complaintsWithVotes = complaints.map(complaint => {
+       const voteCount = cachedVotes.filter(v => v.complaintId === complaint.id).length;
+       return { ...complaint, voteCount };
+     });
+  
+  // Sort by vote count (highest first)
+  complaintsWithVotes.sort((a, b) => b.voteCount - a.voteCount);
+  
+  return complaintsWithVotes;
+}
 
     // ========== GLOBAL FUNCTIONS ==========
     function switchTab(tab) {
