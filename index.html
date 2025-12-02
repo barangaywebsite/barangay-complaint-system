@@ -1646,13 +1646,13 @@ async function handleUpvote(complaintId) {
                     <p style="font-size: ${baseSize}px; color: ${textColor}; margin: 0 0 1.5rem 0; line-height: 1.6;">${complaint.description}</p>
                     
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                      <button 
-                        class="upvote-button" 
-                        onclick="handleUpvote('${complaint.id}')" 
-                        ${hasVoted || !currentUser ? 'disabled' : ''}
-                        style="padding: 0.75rem 1.5rem; background: ${hasVoted ? backgroundColor : primaryColor}; color: ${hasVoted ? secondaryColor : 'white'}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: ${hasVoted || !currentUser ? 'not-allowed' : 'pointer'}; display: flex; align-items: center; gap: 0.5rem; font-family: ${fontFamily};">
-                        👍 ${hasVoted ? 'Voted' : 'Upvote'}
-                      </button>
+<button 
+  class="upvote-button" 
+  onclick="event.preventDefault(); event.stopPropagation(); handleUpvote('${complaint.id}')" 
+  ${hasVoted || !currentUser ? 'disabled' : ''}
+  style="padding: 0.75rem 1.5rem; background: ${hasVoted ? backgroundColor : primaryColor}; color: ${hasVoted ? secondaryColor : 'white'}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: ${hasVoted || !currentUser ? 'not-allowed' : 'pointer'}; display: flex; align-items: center; gap: 0.5rem; font-family: ${fontFamily};">
+  👍 ${hasVoted ? 'Voted' : 'Upvote'}
+</button>
                       <span style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${primaryColor};">
                       ${complaint.voteCount} vote${complaint.voteCount !== 1 ? 's' : ''}
 
