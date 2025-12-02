@@ -1805,15 +1805,20 @@ async function handleUpvote(complaintId) {
     }
 
     function renderUI() {
+      console.log('🟢 renderUI START - currentUser:', currentUser, 'isLoading:', isLoading, 'currentTab:', currentTab);
       if (!currentUser) {
+           console.log('🟡 Rendering auth screen');
         renderAuthScreen();
         return;
       }
 
       if (isLoading) {
+           console.log('🟡 Rendering loading screen');
         document.getElementById('app').innerHTML = renderLoadingScreen();
         return;
       }
+
+       console.log('🟢 Proceeding to render main UI');
 
       const customFont = config.font_family;
       const baseFontStack = 'system-ui, -apple-system, sans-serif';
@@ -1912,7 +1917,10 @@ async function handleUpvote(complaintId) {
           const reportData = generateReportData();
           drawPieChart('report-chart', reportData);
         }, 100);
-      }}
+      }
+      document.getElementById('app').innerHTML = appHtml;
+      console.log('🟢 renderUI END - DOM updated');
+    }
                          
     function attachEventListeners() {
       if (currentTab === 'submit') {
