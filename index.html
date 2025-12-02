@@ -1604,7 +1604,8 @@ async function handleUpvote(complaintId) {
                         👍 ${hasVoted ? 'Voted' : 'Upvote'}
                       </button>
                       <span style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${primaryColor};">
-                        ${complaint.upvotes} vote${complaint.upvotes !== 1 ? 's' : ''}
+                      ${complaint.voteCount} vote${complaint.voteCount !== 1 ? 's' : ''}
+
                       </span>
                     </div>
                   </div>
@@ -1844,7 +1845,7 @@ async function handleUpvote(complaintId) {
 
           <main style="max-width: 1200px; margin: 0 auto; padding: 2rem 1rem;">
             ${currentTab === 'admin' && isAdmin ? renderAdminDashboard(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) : ''}
-            ${currentTab === 'complaints' ? renderComplaintsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, sortedComplaints) : ''}
+            ${currentTab === 'complaints' ? renderComplaintsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) : ''}
             ${currentTab === 'submit' ? renderSubmitTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, formTitle, submitButtonText) : ''}
             ${currentTab === 'announcements' ? renderAnnouncementsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbAnnouncements) : ''}
             ${currentTab === 'officials' ? renderOfficialsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, dbOfficials) : ''}
