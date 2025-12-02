@@ -429,12 +429,11 @@ async function handleLogin(e) {
     console.log('✅ LOGIN SUCCESSFUL! User type:', user.userType);
     
     // Show appropriate dashboard
-    if (user.userType === 'admin') {
-      showAdminDashboard();
-    } else {
-      showResidentDashboard();
-    }
-    
+if (user.userType === 'admin') {
+  switchTab('admin');
+} else {
+  switchTab('resident');
+}
     showToast('Login successful!', 'success');
     
   } catch (error) {
@@ -442,6 +441,7 @@ async function handleLogin(e) {
     showToast('An error occurred. Check console for details.', 'error');
   }
 }
+   
 
     async function handleSignup(e) {
       e.preventDefault();
