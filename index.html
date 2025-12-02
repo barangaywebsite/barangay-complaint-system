@@ -629,33 +629,32 @@ async function handleUpvote(complaintId) {
   };
   
   try {
-    // Add vote to cache immediately for instant UI update
+    // Add vote to cache FIRST
     cachedVotes.push(voteData);
     
-    // Update UI instantly without waiting for API
-    updateComplaintsDisplay();
+    // Force immediate re-render BEFORE API call
+    renderUI();
     
     // Then save to backend
     const result = await apiPost('create', 'votes', voteData);
     
-    if (result.success) {
-      showToast('Upvoted successfully!', 'success');
-    } else {
-      // If save failed, remove from cache and revert UI
+    if (!result.success) {
+      // If failed, remove vote and re-render
       const index = cachedVotes.findIndex(v => v.id === voteData.id);
       if (index > -1) cachedVotes.splice(index, 1);
-      updateComplaintsDisplay();
+      renderUI();
       showToast('Failed to upvote. Please try again.', 'error');
+    } else {
+      showToast('Upvoted successfully!', 'success');
     }
   } catch (error) {
-    // If error, remove from cache and revert UI
+    // If error, remove vote and re-render
     const index = cachedVotes.findIndex(v => v.id === voteData.id);
     if (index > -1) cachedVotes.splice(index, 1);
-    updateComplaintsDisplay();
+    renderUI();
     showToast('An error occurred while upvoting', 'error');
   }
 }
-
     function handleLogout() {
       currentUser = null;
       currentTab = 'complaints';
