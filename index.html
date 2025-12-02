@@ -138,16 +138,33 @@
     // ========== API FUNCTIONS ==========
 // API GET - Fetch data
 async function apiGet(type) {
+  console.log(`=== API GET REQUEST ===`);
+  console.log('Type:', type);
+  console.log('Full URL:', `${API_URL}?type=${type}`);
+  
   try {
     const response = await fetch(`${API_URL}?type=${type}`);
+    console.log('Response status:', response.status);
+    console.log('Response OK:', response.ok);
+    
     const data = await response.json();
+    console.log(`Raw data received for type "${type}":`, data);
+    
     if (data.error) {
-      console.error('API Error:', data.error);
+      console.error('❌ API Error:', data.error);
       return [];
     }
+    
+    if (Array.isArray(data)) {
+      console.log(`✅ Success: ${data.length} items received`);
+    } else {
+      console.warn('⚠️ Data is not an array:', typeof data);
+    }
+    
+    console.log('======================');
     return data;
   } catch (error) {
-    console.error('Fetch error:', error);
+    console.error('❌ Fetch error:', error);
     showToast('Connection error. Please try again.', 'error');
     return [];
   }
