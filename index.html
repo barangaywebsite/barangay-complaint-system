@@ -304,6 +304,36 @@ async function loadAllData() {
       return filtered;
     }
 
+   function updateComplaintsDisplay() {
+  // Get fresh data with vote counts
+  const complaints = getComplaintsWithVotes();
+  
+  // Apply filters
+  let filteredComplaints = complaints;
+  if (statusFilter !== 'all') {
+    filteredComplaints = filteredComplaints.filter(c => c.status === statusFilter);
+  }
+  if (categoryFilter !== 'all') {
+    filteredComplaints = filteredComplaints.filter(c => c.category === categoryFilter);
+  }
+  filteredComplaints = filterComplaintsByDate(filteredComplaints, dateFilter, startDate, endDate);
+  
+  // Get config values
+  const baseSize = config.font_size;
+  const fontFamily = `${config.font_family}, system-ui, -apple-system, sans-serif`;
+  const backgroundColor = config.background_color;
+  const surfaceColor = config.surface_color;
+  const textColor = config.text_color;
+  const primaryColor = config.primary_action_color;
+  const secondaryColor = config.secondary_action_color;
+  
+  // Re-render just the complaints tab content
+  const mainElement = document.querySelector('main');
+  if (mainElement && currentTab === 'complaints') {
+    mainElement.innerHTML = renderComplaintsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints);
+  }
+}
+
     function generateReportData() {
       let complaints = getComplaints();
       
@@ -599,20 +629,29 @@ async function handleUpvote(complaintId) {
   };
   
   try {
+    // Add vote to cache immediately for instant UI update
+    cachedVotes.push(voteData);
+    
+    // Update UI instantly without waiting for API
+    updateComplaintsDisplay();
+    
+    // Then save to backend
     const result = await apiPost('create', 'votes', voteData);
     
     if (result.success) {
-      // Add vote to cache immediately (no loading needed)
-      cachedVotes.push(voteData);
-      
-      // Re-render UI immediately with updated data
-      renderUI();
-      
       showToast('Upvoted successfully!', 'success');
     } else {
+      // If save failed, remove from cache and revert UI
+      const index = cachedVotes.findIndex(v => v.id === voteData.id);
+      if (index > -1) cachedVotes.splice(index, 1);
+      updateComplaintsDisplay();
       showToast('Failed to upvote. Please try again.', 'error');
     }
   } catch (error) {
+    // If error, remove from cache and revert UI
+    const index = cachedVotes.findIndex(v => v.id === voteData.id);
+    if (index > -1) cachedVotes.splice(index, 1);
+    updateComplaintsDisplay();
     showToast('An error occurred while upvoting', 'error');
   }
 }
