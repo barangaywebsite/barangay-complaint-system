@@ -579,51 +579,56 @@ if (user.userType === 'admin') {
       }
     }
 
-    async function handleUpvote(complaintId) {
-      if (!currentUser) return;
-
-      if (hasUserVoted(complaintId, currentUser.id)) {
-        showToast('You have already voted on this complaint.', 'error');
-        return;
-      }
-
-      const complaint = cachedComplaints.find(c => c.id === complaintId);
+async function handleUpvote(complaintId) {
+  console.log('=== UPVOTE CLICKED ===');
+  console.log('Complaint ID:', complaintId);
+  console.log('Current User:', currentUser);
+  
+  if (!currentUser) {
+    console.error('❌ No user logged in');
+    showToast('Please login to upvote', 'error');
+    return;
+  }
+  
+  console.log('Checking if user already voted...');
+  const alreadyVoted = hasUserVoted(complaintId, currentUser.id);
+  console.log('Already voted:', alreadyVoted);
+  
+  if (alreadyVoted) {
+    showToast('You have already upvoted this complaint', 'error');
+    return;
+  }
+  
+  console.log('Creating vote record...');
+  const voteData = {
+    id: Date.now().toString(),
+    complaintId: complaintId,
+    userId: currentUser.id,
+    createdAt: new Date().toISOString()
+  };
+  
+  console.log('Vote data:', voteData);
+  
+  try {
+    console.log('Sending vote to API...');
+    const result = await apiPost('Votes', voteData);
+    console.log('API response:', result);
+    
+    if (result.success) {
+      console.log('✅ Vote successful!');
+      showToast('Upvoted successfully!', 'success');
       
-      if (complaint) {
-        const updatedComplaint = { ...complaint, upvotes: complaint.upvotes + 1 };
-        
-        const newVote = {
-          id: Date.now().toString(),
-          complaintId,
-          userId: currentUser.id,
-          createdAt: new Date().toISOString()
-        };
-
-        isLoading = true;
-        renderUI();
-        
-        const [updateResult, voteResult] = await Promise.all([
-          apiPost('update', 'Complaints', updatedComplaint),
-          apiPost('create', 'Votes', newVote)
-        ]);
-        
-        isLoading = false;
-        
-        if (updateResult.success && voteResult.success) {
-          const index = cachedComplaints.findIndex(c => c.id === complaintId);
-          if (index !== -1) {
-            cachedComplaints[index] = updatedComplaint;
-          }
-          cachedVotes.push(newVote);
-          
-          showToast('Upvoted successfully!', 'success');
-          renderUI();
-        } else {
-          showToast('Failed to upvote. Please try again.', 'error');
-          renderUI();
-        }
-      }
+      // Reload data to update vote count
+      await loadAllData();
+    } else {
+      console.error('❌ Vote failed:', result);
+      showToast('Failed to upvote. Please try again.', 'error');
     }
+  } catch (error) {
+    console.error('❌ Upvote error:', error);
+    showToast('An error occurred while upvoting', 'error');
+  }
+}
 
     function handleLogout() {
       currentUser = null;
