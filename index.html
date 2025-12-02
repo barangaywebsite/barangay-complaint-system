@@ -643,10 +643,10 @@ async function handleUpvote(complaintId) {
     const complaintsWithVotes = getComplaintsWithVotes();
     console.log('🔵 Complaints with votes:', complaintsWithVotes.map(c => ({ id: c.id, voteCount: c.voteCount })));
     
-    // Force immediate re-render BEFORE API call
-    console.log('🔵 Calling renderUI()...');
-    renderUI();
-    console.log('🔵 renderUI() completed');
+    // Refresh ONLY the complaints section (not the whole page)
+    console.log('🔵 Calling refreshComplaintsOnly()...');
+    refreshComplaintsOnly();
+    console.log('🔵 refreshComplaintsOnly() completed');
     
     // Then save to backend
     const result = await apiPost('create', 'votes', voteData);
@@ -654,7 +654,7 @@ async function handleUpvote(complaintId) {
     if (!result.success) {
       const index = cachedVotes.findIndex(v => v.id === voteData.id);
       if (index > -1) cachedVotes.splice(index, 1);
-      renderUI();
+      refreshComplaintsOnly();
       showToast('Failed to upvote. Please try again.', 'error');
     } else {
       showToast('Upvoted successfully!', 'success');
@@ -663,7 +663,7 @@ async function handleUpvote(complaintId) {
     console.error('🔴 Error:', error);
     const index = cachedVotes.findIndex(v => v.id === voteData.id);
     if (index > -1) cachedVotes.splice(index, 1);
-    renderUI();
+    refreshComplaintsOnly();
     showToast('An error occurred while upvoting', 'error');
   }
 }
@@ -1921,6 +1921,40 @@ async function handleUpvote(complaintId) {
       document.getElementById('app').innerHTML = appHtml;
       console.log('🟢 renderUI END - DOM updated');
     }
+
+   function refreshComplaintsOnly() {
+  console.log('🟣 Refreshing complaints only');
+  
+  // Get fresh data
+  const complaints = getComplaintsWithVotes();
+  let filteredComplaints = complaints;
+  
+  // Apply filters
+  if (statusFilter !== 'all') {
+    filteredComplaints = filteredComplaints.filter(c => c.status === statusFilter);
+  }
+  if (categoryFilter !== 'all') {
+    filteredComplaints = filteredComplaints.filter(c => c.category === categoryFilter);
+  }
+  filteredComplaints = filterComplaintsByDate(filteredComplaints, dateFilter, startDate, endDate);
+  
+  // Get config
+  const baseSize = config.font_size;
+  const fontFamily = `${config.font_family}, system-ui, -apple-system, sans-serif`;
+  const backgroundColor = config.background_color;
+  const surfaceColor = config.surface_color;
+  const textColor = config.text_color;
+  const primaryColor = config.primary_action_color;
+  const secondaryColor = config.secondary_action_color;
+  
+  // Find the main element and update ONLY if we're on complaints tab
+  const mainElement = document.querySelector('main');
+  if (mainElement && currentTab === 'complaints') {
+    const newContent = renderComplaintsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints);
+    mainElement.innerHTML = newContent;
+    console.log('🟣 Complaints section updated');
+  }
+}
                          
     function attachEventListeners() {
       if (currentTab === 'submit') {
