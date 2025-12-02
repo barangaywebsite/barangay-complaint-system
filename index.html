@@ -609,12 +609,15 @@ if (user.userType === 'admin') {
     }
 
 async function handleUpvote(complaintId) {
+  console.log('🔵 Upvote clicked for complaint:', complaintId);
+  
   if (!currentUser) {
     showToast('Please login to upvote', 'error');
     return;
   }
   
   const alreadyVoted = hasUserVoted(complaintId, currentUser.id);
+  console.log('🔵 Already voted?', alreadyVoted);
   
   if (alreadyVoted) {
     showToast('You have already upvoted this complaint', 'error');
@@ -628,18 +631,27 @@ async function handleUpvote(complaintId) {
     createdAt: new Date().toISOString()
   };
   
+  console.log('🔵 Vote data created:', voteData);
+  console.log('🔵 Cached votes BEFORE:', cachedVotes.length);
+  
   try {
     // Add vote to cache FIRST
     cachedVotes.push(voteData);
+    console.log('🔵 Cached votes AFTER:', cachedVotes.length);
+    
+    // Get fresh complaints with votes
+    const complaintsWithVotes = getComplaintsWithVotes();
+    console.log('🔵 Complaints with votes:', complaintsWithVotes.map(c => ({ id: c.id, voteCount: c.voteCount })));
     
     // Force immediate re-render BEFORE API call
+    console.log('🔵 Calling renderUI()...');
     renderUI();
+    console.log('🔵 renderUI() completed');
     
     // Then save to backend
     const result = await apiPost('create', 'votes', voteData);
     
     if (!result.success) {
-      // If failed, remove vote and re-render
       const index = cachedVotes.findIndex(v => v.id === voteData.id);
       if (index > -1) cachedVotes.splice(index, 1);
       renderUI();
@@ -648,7 +660,7 @@ async function handleUpvote(complaintId) {
       showToast('Upvoted successfully!', 'success');
     }
   } catch (error) {
-    // If error, remove vote and re-render
+    console.error('🔴 Error:', error);
     const index = cachedVotes.findIndex(v => v.id === voteData.id);
     if (index > -1) cachedVotes.splice(index, 1);
     renderUI();
