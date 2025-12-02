@@ -348,37 +348,89 @@ async function apiPost(action, type, record = null, id = null) {
     }
 
     // ========== EVENT HANDLERS ==========
-    async function handleLogin(e) {
-      e.preventDefault();
+async function handleLogin(e) {
+  e.preventDefault();
+  
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const adminId = document.getElementById('login-adminid').value.trim();
+  
+  console.log('=== LOGIN DEBUG ===');
+  console.log('Entered username:', username);
+  console.log('Entered password:', password);
+  console.log('Entered adminId:', `"${adminId}"`);
+  
+  if (!username || !password) {
+    showToast('Please enter username and password', 'error');
+    return;
+  }
+  
+  try {
+    // Get all users
+    const users = await apiGet('users');
+    console.log('Total users in database:', users.length);
+    console.log('All users:', users);
+    
+    // Find matching user
+    const user = users.find(u => {
+      console.log('--- Checking user:', u.username, '---');
+      console.log('DB username:', u.username, '| Match:', u.username.toString().toLowerCase() === username.toLowerCase());
+      console.log('DB password:', u.password, '| Match:', u.password.toString() === password);
+      console.log('DB adminId:', `"${u.adminId}"`, '| Type:', typeof u.adminId, '| Empty:', u.adminId === '' || !u.adminId);
+      console.log('DB userType:', u.userType);
       
-      const formData = new FormData(e.target);
-      const username = formData.get('username');
-      const password = formData.get('password');
-      const adminId = formData.get('admin_id');
-
-      isLoading = true;
-      renderUI();
+      const usernameMatch = u.username.toString().toLowerCase() === username.toLowerCase();
+      const passwordMatch = u.password.toString() === password;
       
-      await loadAllData();
-
-      let user;
-      if (userType === 'admin') {
-        user = cachedUsers.find(u => u.username === username && u.password === password && u.userType === 'admin' && u.adminId === adminId);
+      // Admin ID matching logic:
+      let adminIdMatch = false;
+      const dbAdminId = u.adminId ? u.adminId.toString().trim() : '';
+      const enteredAdminId = adminId.trim();
+      
+      if (dbAdminId === '') {
+        // Database has empty adminId - allow login regardless of what user enters
+        adminIdMatch = true;
+        console.log('✓ Admin ID empty in DB - auto match');
       } else {
-        user = cachedUsers.find(u => u.username === username && u.password === password && u.userType === 'resident');
+        // Database has an adminId - must match exactly
+        adminIdMatch = dbAdminId === enteredAdminId;
+        console.log(`Admin ID check: "${dbAdminId}" === "${enteredAdminId}" = ${adminIdMatch}`);
       }
       
-      isLoading = false;
+      const finalMatch = usernameMatch && passwordMatch && adminIdMatch;
+      console.log('FINAL RESULT:', finalMatch ? '✅ MATCH' : '❌ NO MATCH');
       
-      if (user) {
-        currentUser = user;
-        showToast('Login successful!', 'success');
-        renderUI();
-      } else {
-        showToast(userType === 'admin' ? 'Invalid credentials or Admin ID' : 'Invalid username or password', 'error');
-        renderUI();
-      }
+      return finalMatch;
+    });
+    
+    console.log('===================');
+    console.log('Found user:', user);
+    
+    if (!user) {
+      showToast('Invalid username or password', 'error');
+      return;
     }
+    
+    // Store user session
+    currentUser = user;
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    
+    console.log('✅ LOGIN SUCCESSFUL! User type:', user.userType);
+    
+    // Show appropriate dashboard
+    if (user.userType === 'admin') {
+      showAdminDashboard();
+    } else {
+      showResidentDashboard();
+    }
+    
+    showToast('Login successful!', 'success');
+    
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    showToast('An error occurred. Check console for details.', 'error');
+  }
+}
 
     async function handleSignup(e) {
       e.preventDefault();
