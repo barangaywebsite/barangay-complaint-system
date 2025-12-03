@@ -75,17 +75,35 @@
     // ========== CONFIGURATION ==========
     const API_URL = 'https://script.google.com/macros/s/AKfycbzpffd_-cSRt0iuY6M0cb2A6QU4GZ0BxxThIm_LmnavNzvXD2ZAAcP-wkDJTcDm42lQ/exec'; // Replace with your Google Apps Script Web App URL
     // Restore login session
+   localStorage.removeItem('currentUser');
+
 window.addEventListener('load', () => {
   const savedUser = localStorage.getItem('currentUser');
+
   if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    loadAllData().then(() => {
-      switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
-    });
-  } else {
-    renderUI(); // show login screen
+    try {
+      const parsed = JSON.parse(savedUser);
+
+      // Validate saved user structure to prevent corrupted login
+      if (parsed && parsed.id && parsed.username && parsed.userType) {
+        currentUser = parsed;
+        loadAllData().then(() => {
+            switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
+        });
+        return;
+      } else {
+        localStorage.removeItem('currentUser');
+      }
+
+    } catch (e) {
+      localStorage.removeItem('currentUser');
+    }
   }
+
+  // If no saved session or invalid
+  renderUI();
 });
+
 
     const config = {
       background_color: "#f0f4f8",
@@ -729,13 +747,15 @@ async function handleUpvote(complaintId) {
     showToast('An error occurred while upvoting', 'error');
   }
 }
-    function handleLogout() {
-      currentUser = null;
-      currentTab = 'complaints';
-      adminTab = 'complaints';
-      renderUI();
-      showToast('Logged out successfully', 'success');
-    }
+function handleLogout() {
+  localStorage.removeItem('currentUser');   // <-- Required
+  currentUser = null;
+  currentTab = 'complaints';
+  adminTab = 'complaints';
+  renderUI();
+  showToast('Logged out successfully', 'success');
+}
+
 
     async function handleStatusUpdate(complaintId, newStatus) {
       const complaint = cachedComplaints.find(c => c.id === complaintId);
