@@ -76,29 +76,15 @@
     const API_URL = 'https://script.google.com/macros/s/AKfycbzpffd_-cSRt0iuY6M0cb2A6QU4GZ0BxxThIm_LmnavNzvXD2ZAAcP-wkDJTcDm42lQ/exec'; // Replace with your Google Apps Script Web App URL
     // Restore login session
 window.addEventListener('load', () => {
-  const savedUserStr = localStorage.getItem('currentUser');
-  if (savedUserStr) {
-    try {
-      const parsed = JSON.parse(savedUserStr);
-      // Validate parsed object has minimal required fields
-      if (parsed && parsed.id && parsed.userType) {
-        // Store as a candidate but DO NOT automatically set as currentUser.
-        // This forces explicit user confirmation to restore session on reload.
-        savedUserCandidate = parsed;
-        console.log('Found saved user candidate (will require confirmation):', savedUserCandidate);
-        renderUI();
-        return;
-      } else {
-        // Not a valid user object — remove it and show login
-        localStorage.removeItem('currentUser');
-      }
-    } catch (err) {
-      console.warn('Failed to parse saved currentUser, clearing it.', err);
-      localStorage.removeItem('currentUser');
-    }
+  const savedUser = localStorage.getItem('currentUser');
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    loadAllData().then(() => {
+      switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
+    });
+  } else {
+    renderUI(); // show login screen
   }
-
-  renderUI(); // show login screen
 });
 
     const config = {
@@ -118,7 +104,6 @@ window.addEventListener('load', () => {
     // ========== STATE ==========
     let currentTab = 'complaints';
     let currentUser = null;
-    let savedUserCandidate = null; // candidate restored from localStorage, requires user confirmation
     let authMode = 'login';
     let userType = 'resident';
     let adminTab = 'complaints';
@@ -173,35 +158,22 @@ async function apiGet(type) {
     const response = await fetch(`${API_URL}?type=${type}`);
     console.log('Response status:', response.status);
     console.log('Response OK:', response.ok);
-
-    const json = await response.json();
-    console.log(`Raw data received for type "${type}":`, json);
-
-    // Normalize different server response shapes
-    // Accept either: 1) an array (old behavior), 2) { success: true, data: [...] }, or 3) { error: '...' }
-    if (Array.isArray(json)) {
-      console.log(`✅ Success (array): ${json.length} items received`);
-      return json;
+    
+    const data = await response.json();
+    console.log(`Raw data received for type "${type}":`, data);
+    
+    if (data.error) {
+      console.error('❌ API Error:', data.error);
+      return [];
     }
-
-    if (json && typeof json === 'object') {
-      if (json.error) {
-        console.error('❌ API Error:', json.error);
-        return [];
-      }
-
-      if (json.success && Array.isArray(json.data)) {
-        console.log(`✅ Success (wrapped): ${json.data.length} items received`);
-        return json.data;
-      }
-
-      // If the server returned an object that's not an array, but contains keys similar to row objects,
-      // try to detect a `data` property anyway.
-      if (Array.isArray(json.data)) return json.data;
+    
+    if (Array.isArray(data)) {
+      console.log(`✅ Success: ${data.length} items received`);
+    } else {
+      console.warn('⚠️ Data is not an array:', typeof data);
     }
-
-    console.warn('⚠️ Unrecognized API response shape; returning empty array');
-    return [];
+    console.log('======================');
+    return data;
   } catch (error) {
     console.error('❌ Fetch error:', error);
     showToast('Connection error. Please try again.', 'error');
@@ -226,18 +198,10 @@ async function apiPost(action, type, record = null, id = null) {
     
     const response = await fetch(url);
     const data = await response.json();
-
-    console.log('Response (raw):', data); // DEBUG
-
-    // Normalize response: if server returns { success: true, data: ... } or an object with success flag
-    if (data && typeof data === 'object') {
-      if (data.success !== undefined) return data;
-      // If API returns plain object with message/success fields
-      if (data.message || data.error) return data;
-    }
-
-    // If server returned a bare array or other primitive, wrap it conservatively
-    return { success: true, data: Array.isArray(data) ? data : data };
+    
+    console.log('Response:', data); // DEBUG
+    
+    return data;
   } catch (error) {
     console.error('API Post error:', error);
     showToast('Connection error. Please try again.', 'error');
@@ -552,8 +516,9 @@ async function handleLogin(e) {
       return;
     }
     
-    // Store user session (in-memory only). Do NOT persist to localStorage to avoid automatic reload-login.
+    // Store user session
     currentUser = user;
+    localStorage.setItem('currentUser', JSON.stringify(user));
     
     console.log('✅ LOGIN SUCCESSFUL! User type:', user.userType);
 
@@ -765,43 +730,11 @@ async function handleUpvote(complaintId) {
   }
 }
     function handleLogout() {
-      // Clear session both in-memory and persisted storage
       currentUser = null;
-      localStorage.removeItem('currentUser');
       currentTab = 'complaints';
       adminTab = 'complaints';
       renderUI();
       showToast('Logged out successfully', 'success');
-    }
-
-    // User explicitly continues as the saved user candidate (after reload)
-    async function continueAsSavedUser() {
-      if (!savedUserCandidate) return;
-      currentUser = savedUserCandidate;
-      // Do NOT persist the restored session automatically. Keep session in-memory only.
-      savedUserCandidate = null;
-      isLoading = true;
-      renderUI();
-      try {
-        await loadAllData();
-        switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
-        showToast('Session restored', 'success');
-      } catch (err) {
-        console.error('Error restoring session:', err);
-        localStorage.removeItem('currentUser');
-        currentUser = null;
-        renderUI();
-        showToast('Failed to restore session', 'error');
-      } finally {
-        isLoading = false;
-        renderUI();
-      }
-    }
-
-    function dismissSavedUser() {
-      savedUserCandidate = null;
-      localStorage.removeItem('currentUser');
-      renderUI();
     }
 
     async function handleStatusUpdate(complaintId, newStatus) {
@@ -1186,19 +1119,6 @@ async function handleUpvote(complaintId) {
             </div>
 
             <div style="background: ${surfaceColor}; border-radius: 16px; padding: 2.5rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
-              ${savedUserCandidate ? `
-                <div style="margin-bottom:1rem; padding:0.75rem; border:1px solid #e5e7eb; border-radius:8px; background:#fbfbfd; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
-                  <div style="flex:1;">
-                    <strong>Continue as</strong>
-                    <div style="font-weight:600">${savedUserCandidate.fullName || savedUserCandidate.username}</div>
-                    <div style="font-size:12px; color:#64748b">Stored session found — click to continue or switch account</div>
-                  </div>
-                  <div style="display:flex; gap:0.5rem;">
-                    <button onclick="continueAsSavedUser()" style="padding:0.5rem 0.75rem; background:${primaryColor}; color:#fff; border-radius:6px; border:none; cursor:pointer;">Continue</button>
-                    <button onclick="dismissSavedUser()" style="padding:0.5rem 0.75rem; background:transparent; border:1px solid #e5e7eb; color:${textColor}; border-radius:6px; cursor:pointer;">Use different</button>
-                  </div>
-                </div>
-              ` : ''}
               <div style="margin-bottom: 1.5rem;">
                 <div style="display: flex; gap: 0.5rem; background: ${backgroundColor}; padding: 0.25rem; border-radius: 8px;">
                   <button onclick="switchUserType('resident')" style="flex: 1; padding: 0.75rem; border: none; background: ${userType === 'resident' ? surfaceColor : 'transparent'}; color: ${userType === 'resident' ? primaryColor : textColor}; font-weight: ${userType === 'resident' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily}; box-shadow: ${userType === 'resident' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'};">
