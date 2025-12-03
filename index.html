@@ -1922,14 +1922,22 @@ async function handleUpvote(complaintId) {
       console.log('🟢 renderUI END - DOM updated');
     }
 
-   function refreshComplaintsOnly() {
+  function refreshComplaintsOnly() {
   console.log('🟣 Refreshing complaints only');
+  console.log('🟣 Current tab:', currentTab);
+  
+  // Only refresh if we're on the complaints tab
+  if (currentTab !== 'complaints') {
+    console.log('🟡 Not on complaints tab, skipping refresh');
+    return;
+  }
   
   // Get fresh data
   const complaints = getComplaintsWithVotes();
-  let filteredComplaints = complaints;
+  console.log('🟣 Got complaints with votes:', complaints.map(c => ({ id: c.id, title: c.title.substring(0, 20), voteCount: c.voteCount })));
   
   // Apply filters
+  let filteredComplaints = complaints;
   if (statusFilter !== 'all') {
     filteredComplaints = filteredComplaints.filter(c => c.status === statusFilter);
   }
@@ -1938,7 +1946,9 @@ async function handleUpvote(complaintId) {
   }
   filteredComplaints = filterComplaintsByDate(filteredComplaints, dateFilter, startDate, endDate);
   
-  // Get config
+  console.log('🟣 Filtered complaints:', filteredComplaints.map(c => ({ id: c.id, title: c.title.substring(0, 20), voteCount: c.voteCount })));
+  
+  // Get config values
   const baseSize = config.font_size;
   const fontFamily = `${config.font_family}, system-ui, -apple-system, sans-serif`;
   const backgroundColor = config.background_color;
@@ -1947,12 +1957,18 @@ async function handleUpvote(complaintId) {
   const primaryColor = config.primary_action_color;
   const secondaryColor = config.secondary_action_color;
   
-  // Find the main element and update ONLY if we're on complaints tab
+  // Find and update ONLY the main content area (not the whole page)
   const mainElement = document.querySelector('main');
-  if (mainElement && currentTab === 'complaints') {
+  console.log('🟣 Main element found:', !!mainElement);
+  
+  if (mainElement) {
     const newContent = renderComplaintsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints);
+    console.log('🟣 New content length:', newContent.length);
+    console.log('🟣 First 200 chars of new content:', newContent.substring(0, 200));
     mainElement.innerHTML = newContent;
     console.log('🟣 Complaints section updated');
+  } else {
+    console.log('🔴 Main element NOT found!');
   }
 }
                          
