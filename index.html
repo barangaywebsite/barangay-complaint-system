@@ -1053,6 +1053,41 @@ const adminId = formData.get('admin_id')?.toString().trim();
   `;
 }
 
+    function renderSubmitTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, formTitle, submitButtonText) {
+      return `
+        <div style="max-width: 600px; margin: 0 auto;">
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1rem 0;">${formTitle}</h2>
+          <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0 0 2rem 0;">Help us improve our barangay by reporting issues or concerns.</p>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <form id="complaint-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="complaint-title" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Complaint Title</label>
+                <input type="text" id="complaint-title" name="title" required placeholder="Brief summary of your complaint" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="complaint-category" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Category</label>
+                <select id="complaint-category" name="category" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="">Select a category</option>
+                  ${categories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
+                </select>
+              </div>
+
+              <div style="margin-bottom: 2rem;">
+                <label for="complaint-description" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+                <textarea id="complaint-description" name="description" required rows="6" placeholder="Please provide details about your complaint..." style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box; resize: vertical;"></textarea>
+              </div>
+
+              <button type="submit" style="width: 100%; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize * 1.1}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                ${submitButtonText}
+              </button>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+   
     // Include all render helper functions from original code
     function renderAdminDashboard(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) {
       return `
