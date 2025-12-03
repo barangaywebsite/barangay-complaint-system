@@ -1755,6 +1755,15 @@ const adminId = formData.get('admin_id')?.toString().trim();
     window.cancelEditOfficial = cancelEditOfficial;
     window.startEditHotline = startEditHotline;
     window.cancelEditHotline = cancelEditHotline;
+   window.renderSubmitTab = renderSubmitTab;
+window.renderAnnouncementsTab = renderAnnouncementsTab;
+window.renderOfficialsTab = renderOfficialsTab;
+window.renderHotlinesTab = renderHotlinesTab;
+   window.renderSubmitTab = renderAdminAnnouncements;
+window.renderAnnouncementsTab = renderAdminOfficials;
+window.renderOfficialsTab = renderAdminHotlines;
+
+
 
     // Initialize
     renderUI();
