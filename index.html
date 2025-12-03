@@ -1946,7 +1946,10 @@ async function handleUpvote(complaintId) {
   }
   filteredComplaints = filterComplaintsByDate(filteredComplaints, dateFilter, startDate, endDate);
   
-  console.log('🟣 Filtered complaints:', filteredComplaints.map(c => ({ id: c.id, title: c.title.substring(0, 20), voteCount: c.voteCount })));
+  // SORT by vote count (highest first) - THIS WAS MISSING!
+  filteredComplaints.sort((a, b) => b.voteCount - a.voteCount);
+  
+  console.log('🟣 Filtered and SORTED complaints:', filteredComplaints.map(c => ({ id: c.id, title: c.title.substring(0, 20), voteCount: c.voteCount })));
   
   // Get config values
   const baseSize = config.font_size;
