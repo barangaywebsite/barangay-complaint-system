@@ -2003,20 +2003,23 @@ async function handleUpvote(complaintId) {
       }
     }
 
-     function getComplaintsWithVotes() {
-       const complaints = getComplaints();
+function getComplaintsWithVotes() {
+  // Use cachedComplaints directly (already has the latest data)
+  const complaints = cachedComplaints;
   
-    // Calculate vote count for each complaint
-       const complaintsWithVotes = complaints.map(complaint => {
-       const voteCount = cachedVotes.filter(v => v.complaintId === complaint.id).length;
-       return { ...complaint, voteCount };
-     });
+  // Calculate vote count for each complaint using current cachedVotes
+  const complaintsWithVotes = complaints.map(complaint => {
+    const voteCount = cachedVotes.filter(v => v.complaintId === complaint.id).length;
+    return { ...complaint, voteCount };
+  });
   
   // Sort by vote count (highest first)
   complaintsWithVotes.sort((a, b) => b.voteCount - a.voteCount);
   
   return complaintsWithVotes;
 }
+
+
 
     // ========== GLOBAL FUNCTIONS ==========
     function switchTab(tab) {
