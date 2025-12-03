@@ -608,6 +608,11 @@ if (user.userType === 'admin') {
       }
     }
 
+Good! I see you added the logs. Now you have a duplicate line (line 42 and 45 are the same). Let me clean that up:
+
+🔧 Clean Up Your handleUpvote Function
+Replace your handleUpvote with this cleaned-up version:
+
 async function handleUpvote(complaintId) {
   console.log('🔵 Upvote clicked for complaint:', complaintId);
   
@@ -634,19 +639,16 @@ async function handleUpvote(complaintId) {
   console.log('🔵 Vote data created:', voteData);
   console.log('🔵 Cached votes BEFORE:', cachedVotes.length);
   
- try {
-  // Add vote to cache FIRST
-  cachedVotes.push(voteData);
-  console.log('🔵 Cached votes AFTER:', cachedVotes.length);
-  
-  // ADD THESE NEW LOGS:
-  console.log('🔵 ALL cached votes:', cachedVotes);
-  console.log('🔵 Votes for complaint', complaintId, ':', cachedVotes.filter(v => v.complaintId === complaintId));
-  console.log('🔵 Vote count for this complaint:', cachedVotes.filter(v => v.complaintId === complaintId).length);
-  
-  // Get fresh complaints with votes
-  const complaintsWithVotes = getComplaintsWithVotes();
-  console.log('🔵 Complaints with votes:', complaintsWithVotes.map(c => ({ id: c.id, voteCount: c.voteCount })));
+  try {
+    // Add vote to cache FIRST
+    cachedVotes.push(voteData);
+    console.log('🔵 Cached votes AFTER:', cachedVotes.length);
+    
+    // Debug: Check what votes exist for this complaint
+    console.log('🔵 ALL cached votes:', cachedVotes);
+    console.log('🔵 Votes for complaint', complaintId, ':', cachedVotes.filter(v => v.complaintId === complaintId));
+    console.log('🔵 Vote count for this complaint:', cachedVotes.filter(v => v.complaintId === complaintId).length);
+    
     // Get fresh complaints with votes
     const complaintsWithVotes = getComplaintsWithVotes();
     console.log('🔵 Complaints with votes:', complaintsWithVotes.map(c => ({ id: c.id, voteCount: c.voteCount })));
