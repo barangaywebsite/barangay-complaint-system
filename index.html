@@ -181,11 +181,10 @@ async function apiGet(type) {
   }
 }
 
-// API POST - Send data (using GET with parameters)
-// API POST - Send data (using POST method) - FIXED
+// API POST - Send data (using POST method) - FIX
 async function apiPost(action, type, record = null, id = null) {
     try {
-        // We'll keep action/type in URL params for Apps Script to easily route the request
+        // Send action/type in URL params for Apps Script routing
         let url = `${API_URL}?action=${action}&type=${type}`;
 
         // Prepare the data payload for the request body
@@ -196,14 +195,14 @@ async function apiPost(action, type, record = null, id = null) {
         
         // Configuration for the POST request
         const options = {
-            method: 'POST', // <-- CRITICAL FIX: Ensures data is sent in the body
+            method: 'POST', // <--- CRITICAL FIX 1: Use POST method
             headers: {
                 'Content-Type': 'application/json' 
             },
-            body: JSON.stringify(payload) // Send data payload as JSON in the request body
+            body: JSON.stringify(payload) // <--- CRITICAL FIX 2: Send data as JSON in the body
         };
         
-        // If no record or id, delete the body/headers for simple POST (e.g., delete operation)
+        // If no record or id, delete body/headers (e.g., for simple delete operations)
         if (!record && !id) {
              delete options.body;
              delete options.headers;
@@ -223,7 +222,6 @@ async function apiPost(action, type, record = null, id = null) {
         return { success: false, error: error.toString() };
     }
 }
-
 
     // ========== DATA FUNCTIONS ==========
 async function loadAllData() {
