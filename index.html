@@ -76,15 +76,39 @@
     const API_URL = 'https://script.google.com/macros/s/AKfycbzpffd_-cSRt0iuY6M0cb2A6QU4GZ0BxxThIm_LmnavNzvXD2ZAAcP-wkDJTcDm42lQ/exec'; // Replace with your Google Apps Script Web App URL
     // Restore login session
 window.addEventListener('load', () => {
-  const savedUser = localStorage.getItem('currentUser');
-  if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    loadAllData().then(() => {
-      switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
-    });
-  } else {
-    renderUI(); // show login screen
+  const savedUserStr = localStorage.getItem('currentUser');
+  if (savedUserStr) {
+    try {
+      const parsed = JSON.parse(savedUserStr);
+      // Validate parsed object has minimal required fields
+      if (parsed && parsed.id && parsed.userType) {
+        currentUser = parsed;
+        // Load app data and show appropriate tab after successful load
+        loadAllData().then(() => {
+          if (currentUser && currentUser.userType) {
+            switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
+          } else {
+            renderUI();
+          }
+        }).catch(err => {
+          console.error('Error loading data on startup:', err);
+          // Corrupt session or network error: clear stored session and show login
+          localStorage.removeItem('currentUser');
+          currentUser = null;
+          renderUI();
+        });
+        return;
+      } else {
+        // Not a valid user object — remove it and show login
+        localStorage.removeItem('currentUser');
+      }
+    } catch (err) {
+      console.warn('Failed to parse saved currentUser, clearing it.', err);
+      localStorage.removeItem('currentUser');
+    }
   }
+
+  renderUI(); // show login screen
 });
 
     const config = {
@@ -158,22 +182,35 @@ async function apiGet(type) {
     const response = await fetch(`${API_URL}?type=${type}`);
     console.log('Response status:', response.status);
     console.log('Response OK:', response.ok);
-    
-    const data = await response.json();
-    console.log(`Raw data received for type "${type}":`, data);
-    
-    if (data.error) {
-      console.error('❌ API Error:', data.error);
-      return [];
+
+    const json = await response.json();
+    console.log(`Raw data received for type "${type}":`, json);
+
+    // Normalize different server response shapes
+    // Accept either: 1) an array (old behavior), 2) { success: true, data: [...] }, or 3) { error: '...' }
+    if (Array.isArray(json)) {
+      console.log(`✅ Success (array): ${json.length} items received`);
+      return json;
     }
-    
-    if (Array.isArray(data)) {
-      console.log(`✅ Success: ${data.length} items received`);
-    } else {
-      console.warn('⚠️ Data is not an array:', typeof data);
+
+    if (json && typeof json === 'object') {
+      if (json.error) {
+        console.error('❌ API Error:', json.error);
+        return [];
+      }
+
+      if (json.success && Array.isArray(json.data)) {
+        console.log(`✅ Success (wrapped): ${json.data.length} items received`);
+        return json.data;
+      }
+
+      // If the server returned an object that's not an array, but contains keys similar to row objects,
+      // try to detect a `data` property anyway.
+      if (Array.isArray(json.data)) return json.data;
     }
-    console.log('======================');
-    return data;
+
+    console.warn('⚠️ Unrecognized API response shape; returning empty array');
+    return [];
   } catch (error) {
     console.error('❌ Fetch error:', error);
     showToast('Connection error. Please try again.', 'error');
@@ -198,10 +235,18 @@ async function apiPost(action, type, record = null, id = null) {
     
     const response = await fetch(url);
     const data = await response.json();
-    
-    console.log('Response:', data); // DEBUG
-    
-    return data;
+
+    console.log('Response (raw):', data); // DEBUG
+
+    // Normalize response: if server returns { success: true, data: ... } or an object with success flag
+    if (data && typeof data === 'object') {
+      if (data.success !== undefined) return data;
+      // If API returns plain object with message/success fields
+      if (data.message || data.error) return data;
+    }
+
+    // If server returned a bare array or other primitive, wrap it conservatively
+    return { success: true, data: Array.isArray(data) ? data : data };
   } catch (error) {
     console.error('API Post error:', error);
     showToast('Connection error. Please try again.', 'error');
@@ -730,7 +775,9 @@ async function handleUpvote(complaintId) {
   }
 }
     function handleLogout() {
+      // Clear session both in-memory and persisted storage
       currentUser = null;
+      localStorage.removeItem('currentUser');
       currentTab = 'complaints';
       adminTab = 'complaints';
       renderUI();
