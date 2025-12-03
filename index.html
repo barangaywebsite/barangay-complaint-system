@@ -351,6 +351,40 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      border: 2px solid #e9ecef;
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: #6c757d;
+      font-weight: 600;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 400px;
+      margin-bottom: 24px;
+    }
   </style>
   <style>@view-transition { navigation: auto; }</style>
  </head>
@@ -458,7 +492,7 @@
      </div>
     </div>
     <div class="content-wrapper">
-     <div class="tab-container"><button class="tab active" onclick="switchAdminTab('complaints')">Manage Complaints</button> <button class="tab" onclick="switchAdminTab('announcements')">Manage Announcements</button> <button class="tab" onclick="switchAdminTab('officials')">Manage Officials</button> <button class="tab" onclick="switchAdminTab('hotlines')">Manage Hotlines</button>
+     <div class="tab-container"><button class="tab active" onclick="switchAdminTab('complaints')">Manage Complaints</button> <button class="tab" onclick="switchAdminTab('reports')">Reports</button> <button class="tab" onclick="switchAdminTab('announcements')">Manage Announcements</button> <button class="tab" onclick="switchAdminTab('officials')">Manage Officials</button> <button class="tab" onclick="switchAdminTab('hotlines')">Manage Hotlines</button>
      </div><!-- Manage Complaints Tab -->
      <div id="adminComplaintsTab">
       <div class="card">
@@ -466,6 +500,69 @@
        <div class="filter-section"><select id="adminCategoryFilter" onchange="filterAdminComplaints()"> <option value="">All Categories</option> <option value="Roads">Roads</option> <option value="Garbage Collection">Garbage Collection</option> <option value="Noise/Disturbance">Noise/Disturbance</option> <option value="Drainage">Drainage</option> <option value="Security">Security</option> <option value="Other">Other</option> </select> <select id="adminStatusFilter" onchange="filterAdminComplaints()"> <option value="">All Statuses</option> <option value="Submitted">Submitted</option> <option value="Under Review">Under Review</option> <option value="Assigned to Officer">Assigned to Officer</option> <option value="In Progress">In Progress</option> <option value="Resolved">Resolved</option> </select>
        </div>
        <div id="adminComplaintsList"></div>
+      </div>
+     </div><!-- Reports Tab -->
+     <div id="adminReportsTab" class="hidden">
+      <div class="card">
+       <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 20px;">Complaints Reports</h2>
+       <div class="filter-section">
+        <div style="flex: 1; min-width: 200px;"><label class="form-label">Start Date</label> <input type="date" id="reportStartDate" class="input-field">
+        </div>
+        <div style="flex: 1; min-width: 200px;"><label class="form-label">End Date</label> <input type="date" id="reportEndDate" class="input-field">
+        </div>
+        <div style="flex: 1; min-width: 200px;"><label class="form-label">Status Filter</label> <select id="reportStatusFilter" class="input-field"> <option value="">All Statuses</option> <option value="Submitted">Submitted</option> <option value="Under Review">Under Review</option> <option value="Assigned to Officer">Assigned to Officer</option> <option value="In Progress">In Progress</option> <option value="Resolved">Resolved</option> </select>
+        </div>
+        <div style="flex: 1; min-width: 200px;"><label class="form-label">&nbsp;</label> <button class="btn btn-primary" onclick="generateReport()" style="width: 100%;">Generate Report</button>
+        </div>
+       </div>
+       <div class="stats-grid">
+        <div class="stat-card">
+         <div class="stat-number" id="statTotal">
+          0
+         </div>
+         <div class="stat-label">
+          Total Complaints
+         </div>
+        </div>
+        <div class="stat-card">
+         <div class="stat-number" id="statSubmitted">
+          0
+         </div>
+         <div class="stat-label">
+          Submitted
+         </div>
+        </div>
+        <div class="stat-card">
+         <div class="stat-number" id="statInProgress">
+          0
+         </div>
+         <div class="stat-label">
+          In Progress
+         </div>
+        </div>
+        <div class="stat-card">
+         <div class="stat-number" id="statResolved">
+          0
+         </div>
+         <div class="stat-label">
+          Resolved
+         </div>
+        </div>
+       </div>
+       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px;">
+        <div class="card" style="padding: 20px;">
+         <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px; text-align: center;">Complaints by Status</h3>
+         <div class="chart-container">
+          <canvas id="statusChart"></canvas>
+         </div>
+        </div>
+        <div class="card" style="padding: 20px;">
+         <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px; text-align: center;">Complaints by Category</h3>
+         <div class="chart-container">
+          <canvas id="categoryChart"></canvas>
+         </div>
+        </div>
+       </div>
       </div>
      </div><!-- Manage Announcements Tab -->
      <div id="adminAnnouncementsTab" class="hidden">
@@ -565,6 +662,8 @@
     let editingOfficial = null;
     let editingHotline = null;
     let deleteCallback = null;
+    let statusChart = null;
+    let categoryChart = null;
     
     // ===== API FUNCTIONS =====
     async function apiCall(action, data = {}) {
@@ -620,6 +719,7 @@
           renderAdminAnnouncements();
           renderAdminOfficials();
           renderAdminHotlines();
+          generateReport();
         }
       }
     }
@@ -785,7 +885,7 @@
     }
     
     function switchAdminTab(tab) {
-      const tabs = ['complaints', 'announcements', 'officials', 'hotlines'];
+      const tabs = ['complaints', 'reports', 'announcements', 'officials', 'hotlines'];
       tabs.forEach(t => {
         document.getElementById(`admin${t.charAt(0).toUpperCase() + t.slice(1)}Tab`).classList.add('hidden');
       });
@@ -794,6 +894,10 @@
       const tabButtons = document.querySelectorAll('#adminInterface .tab-container .tab');
       tabButtons.forEach(t => t.classList.remove('active'));
       event.target.classList.add('active');
+      
+      if (tab === 'reports') {
+        generateReport();
+      }
     }
     
     async function submitComplaint() {
@@ -980,6 +1084,120 @@
       } else {
         showError('Failed to update complaint status');
       }
+    }
+    
+    // ===== REPORTS FUNCTIONS =====
+    function generateReport() {
+      const complaints = allData.complaints || [];
+      const startDate = document.getElementById('reportStartDate')?.value;
+      const endDate = document.getElementById('reportEndDate')?.value;
+      const statusFilter = document.getElementById('reportStatusFilter')?.value;
+      
+      let filtered = complaints;
+      
+      // Filter by date range
+      if (startDate) {
+        filtered = filtered.filter(c => new Date(c.createdAt) >= new Date(startDate));
+      }
+      if (endDate) {
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(c => new Date(c.createdAt) <= endDateTime);
+      }
+      
+      // Filter by status
+      if (statusFilter) {
+        filtered = filtered.filter(c => c.status === statusFilter);
+      }
+      
+      // Calculate statistics
+      const total = filtered.length;
+      const submitted = filtered.filter(c => c.status === 'Submitted').length;
+      const inProgress = filtered.filter(c => c.status === 'In Progress' || c.status === 'Under Review' || c.status === 'Assigned to Officer').length;
+      const resolved = filtered.filter(c => c.status === 'Resolved').length;
+      
+      // Update stats
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statSubmitted').textContent = submitted;
+      document.getElementById('statInProgress').textContent = inProgress;
+      document.getElementById('statResolved').textContent = resolved;
+      
+      // Group by status
+      const statusCounts = {};
+      filtered.forEach(c => {
+        statusCounts[c.status] = (statusCounts[c.status] || 0) + 1;
+      });
+      
+      // Group by category
+      const categoryCounts = {};
+      filtered.forEach(c => {
+        categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
+      });
+      
+      // Create Status Chart
+      const statusCtx = document.getElementById('statusChart');
+      if (statusChart) {
+        statusChart.destroy();
+      }
+      
+      statusChart = new Chart(statusCtx, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(statusCounts),
+          datasets: [{
+            data: Object.values(statusCounts),
+            backgroundColor: [
+              '#1976d2',
+              '#f57c00',
+              '#7b1fa2',
+              '#388e3c',
+              '#424242'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom'
+            }
+          }
+        }
+      });
+      
+      // Create Category Chart
+      const categoryCtx = document.getElementById('categoryChart');
+      if (categoryChart) {
+        categoryChart.destroy();
+      }
+      
+      categoryChart = new Chart(categoryCtx, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(categoryCounts),
+          datasets: [{
+            data: Object.values(categoryCounts),
+            backgroundColor: [
+              '#667eea',
+              '#764ba2',
+              '#f093fb',
+              '#4facfe',
+              '#43e97b',
+              '#fa709a'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom'
+            }
+          }
+        }
+      });
     }
     
     function renderResidentAnnouncements() {
@@ -1473,5 +1691,5 @@
     // Initialize app
     loadAllData();
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a85991050b0b9ff',t:'MTc2NDc5MTQ3OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a85bd1851fbb9ff',t:'MTc2NDc5Mjk1NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
