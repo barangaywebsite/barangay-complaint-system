@@ -575,6 +575,8 @@ if (user.userType === 'admin') {
 async function handleComplaintSubmit(e) {
   e.preventDefault();
   
+  console.log('📝 SUBMIT START - currentUser:', currentUser);
+  
   if (!currentUser) {
     showToast('Please login to submit a complaint', 'error');
     return;
@@ -594,6 +596,9 @@ async function handleComplaintSubmit(e) {
     userId: currentUser.id
   };
 
+  console.log('📝 New complaint created:', newComplaint);
+  console.log('📝 currentUser before API call:', currentUser);
+
   // Disable submit button and show loading
   const submitButton = e.target.querySelector('button[type="submit"]');
   if (submitButton) {
@@ -604,17 +609,24 @@ async function handleComplaintSubmit(e) {
   try {
     const result = await apiPost('create', 'Complaints', newComplaint);
     
+    console.log('📝 API result:', result);
+    console.log('📝 currentUser after API call:', currentUser);
+    
     if (result.success) {
       // Add to cache immediately
       cachedComplaints.push(newComplaint);
+      console.log('📝 Added to cache. Total complaints:', cachedComplaints.length);
       
       // Reset form
       e.target.reset();
       
       showToast('Complaint submitted successfully!', 'success');
       
+      console.log('📝 About to switch tab. currentUser:', currentUser);
+      
       // Switch to complaints tab using the switchTab function
       setTimeout(() => {
+        console.log('📝 Inside setTimeout. currentUser:', currentUser);
         switchTab('complaints');
       }, 500);
       
@@ -637,6 +649,8 @@ async function handleComplaintSubmit(e) {
       submitButton.innerHTML = config.submit_button_text || 'Submit Complaint';
     }
   }
+  
+  console.log('📝 SUBMIT END - currentUser:', currentUser);
 }
 
 async function handleUpvote(complaintId) {
