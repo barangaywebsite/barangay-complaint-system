@@ -634,11 +634,19 @@ async function handleUpvote(complaintId) {
   console.log('🔵 Vote data created:', voteData);
   console.log('🔵 Cached votes BEFORE:', cachedVotes.length);
   
-  try {
-    // Add vote to cache FIRST
-    cachedVotes.push(voteData);
-    console.log('🔵 Cached votes AFTER:', cachedVotes.length);
-    
+ try {
+  // Add vote to cache FIRST
+  cachedVotes.push(voteData);
+  console.log('🔵 Cached votes AFTER:', cachedVotes.length);
+  
+  // ADD THESE NEW LOGS:
+  console.log('🔵 ALL cached votes:', cachedVotes);
+  console.log('🔵 Votes for complaint', complaintId, ':', cachedVotes.filter(v => v.complaintId === complaintId));
+  console.log('🔵 Vote count for this complaint:', cachedVotes.filter(v => v.complaintId === complaintId).length);
+  
+  // Get fresh complaints with votes
+  const complaintsWithVotes = getComplaintsWithVotes();
+  console.log('🔵 Complaints with votes:', complaintsWithVotes.map(c => ({ id: c.id, voteCount: c.voteCount })));
     // Get fresh complaints with votes
     const complaintsWithVotes = getComplaintsWithVotes();
     console.log('🔵 Complaints with votes:', complaintsWithVotes.map(c => ({ id: c.id, voteCount: c.voteCount })));
