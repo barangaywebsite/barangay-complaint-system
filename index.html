@@ -181,47 +181,35 @@ async function apiGet(type) {
   }
 }
 
-// API POST - Send data (using POST method) - FIX
+// API POST - Send data (using GET with parameters)
 async function apiPost(action, type, record = null, id = null) {
-    try {
-        // Send action/type in URL params for Apps Script routing
-        let url = `${API_URL}?action=${action}&type=${type}`;
-
-        // Prepare the data payload for the request body
-        const payload = {
-            ...(record && { record }),
-            ...(id && { id })
-        };
-        
-        // Configuration for the POST request
-        const options = {
-            method: 'POST', // <--- CRITICAL FIX 1: Use POST method
-            headers: {
-                'Content-Type': 'application/json' 
-            },
-            body: JSON.stringify(payload) // <--- CRITICAL FIX 2: Send data as JSON in the body
-        };
-        
-        // If no record or id, delete body/headers (e.g., for simple delete operations)
-        if (!record && !id) {
-             delete options.body;
-             delete options.headers;
-        }
-
-        console.log('Making POST request to:', url, 'with payload:', payload);
-
-        const response = await fetch(url, options); // Use fetch with options
-        const data = await response.json();
-
-        console.log('Response:', data);
-
-        return data;
-    } catch (error) {
-        console.error('API Post error:', error);
-        showToast('Connection error. Please try again.', 'error');
-        return { success: false, error: error.toString() };
+  try {
+    let url = `${API_URL}?action=${action}&type=${type}`;
+    
+    if (record) {
+      url += `&record=${encodeURIComponent(JSON.stringify(record))}`;
     }
+    
+    if (id) {
+      url += `&id=${encodeURIComponent(id)}`;
+    }
+    
+    console.log('Making request to:', url); // DEBUG
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    console.log('Response:', data); // DEBUG
+    
+    return data;
+  } catch (error) {
+    console.error('API Post error:', error);
+    showToast('Connection error. Please try again.', 'error');
+    return { success: false, error: error.toString() };
+  }
 }
+
+
 
     // ========== DATA FUNCTIONS ==========
 async function loadAllData() {
@@ -741,15 +729,13 @@ async function handleUpvote(complaintId) {
     showToast('An error occurred while upvoting', 'error');
   }
 }
-function handleLogout() {
-  currentUser = null;
-  // <--- CRITICAL FIX: Clear user session from browser storage
-  localStorage.removeItem('currentUser'); 
-  currentTab = 'complaints';
-  adminTab = 'complaints';
-  renderUI(); // This re-renders the UI, which should now show the login screen
-  showToast('Logged out successfully', 'success');
-}
+    function handleLogout() {
+      currentUser = null;
+      currentTab = 'complaints';
+      adminTab = 'complaints';
+      renderUI();
+      showToast('Logged out successfully', 'success');
+    }
 
     async function handleStatusUpdate(complaintId, newStatus) {
       const complaint = cachedComplaints.find(c => c.id === complaintId);
