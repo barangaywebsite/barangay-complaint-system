@@ -182,33 +182,47 @@ async function apiGet(type) {
 }
 
 // API POST - Send data (using GET with parameters)
+// API POST - Send data (using POST method) - FIXED
 async function apiPost(action, type, record = null, id = null) {
-  try {
-    let url = `${API_URL}?action=${action}&type=${type}`;
-    
-    if (record) {
-      url += `&record=${encodeURIComponent(JSON.stringify(record))}`;
-    }
-    
-    if (id) {
-      url += `&id=${encodeURIComponent(id)}`;
-    }
-    
-    console.log('Making request to:', url); // DEBUG
-    
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    console.log('Response:', data); // DEBUG
-    
-    return data;
-  } catch (error) {
-    console.error('API Post error:', error);
-    showToast('Connection error. Please try again.', 'error');
-    return { success: false, error: error.toString() };
-  }
-}
+    try {
+        // We'll keep action/type in URL params for Apps Script to easily route the request
+        let url = `${API_URL}?action=${action}&type=${type}`;
 
+        // Prepare the data payload for the request body
+        const payload = {
+            ...(record && { record }),
+            ...(id && { id })
+        };
+        
+        // Configuration for the POST request
+        const options = {
+            method: 'POST', // <-- CRITICAL FIX: Ensures data is sent in the body
+            headers: {
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify(payload) // Send data payload as JSON in the request body
+        };
+        
+        // If no record or id, delete the body/headers for simple POST (e.g., delete operation)
+        if (!record && !id) {
+             delete options.body;
+             delete options.headers;
+        }
+
+        console.log('Making POST request to:', url, 'with payload:', payload);
+
+        const response = await fetch(url, options); // Use fetch with options
+        const data = await response.json();
+
+        console.log('Response:', data);
+
+        return data;
+    } catch (error) {
+        console.error('API Post error:', error);
+        showToast('Connection error. Please try again.', 'error');
+        return { success: false, error: error.toString() };
+    }
+}
 
 
     // ========== DATA FUNCTIONS ==========
