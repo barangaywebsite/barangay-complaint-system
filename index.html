@@ -552,9 +552,8 @@ async function handleLogin(e) {
       return;
     }
     
-    // Store user session
+    // Store user session (in-memory only). Do NOT persist to localStorage to avoid automatic reload-login.
     currentUser = user;
-    localStorage.setItem('currentUser', JSON.stringify(user));
     
     console.log('✅ LOGIN SUCCESSFUL! User type:', user.userType);
 
@@ -779,8 +778,7 @@ async function handleUpvote(complaintId) {
     async function continueAsSavedUser() {
       if (!savedUserCandidate) return;
       currentUser = savedUserCandidate;
-      // ensure persisted value is consistent
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+      // Do NOT persist the restored session automatically. Keep session in-memory only.
       savedUserCandidate = null;
       isLoading = true;
       renderUI();
