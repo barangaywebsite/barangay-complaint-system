@@ -572,41 +572,59 @@ if (user.userType === 'admin') {
       }
     }
 
-    async function handleComplaintSubmit(e) {
-      e.preventDefault();
-      
-      const formData = new FormData(e.target);
-      
-      const newComplaint = {
-        id: Date.now().toString(),
-        title: formData.get('title'),
-        description: formData.get('description'),
-        category: formData.get('category'),
-        status: 'submitted',
-        upvotes: 0,
-        createdAt: new Date().toISOString(),
-        residentName: currentUser.fullName,
-        userId: currentUser.id
-      };
+async function handleComplaintSubmit(e) {
+  e.preventDefault();
+  
+  if (!currentUser) {
+    showToast('Please login to submit a complaint', 'error');
+    return;
+  }
+  
+  const formData = new FormData(e.target);
+  
+  const newComplaint = {
+    id: Date.now().toString(),
+    title: formData.get('title'),
+    description: formData.get('description'),
+    category: formData.get('category'),
+    status: 'submitted',
+    upvotes: 0,
+    createdAt: new Date().toISOString(),
+    residentName: currentUser.fullName,
+    userId: currentUser.id
+  };
 
-      isLoading = true;
-      renderUI();
-      
-      const result = await apiPost('create', 'Complaints', newComplaint);
-      
-      isLoading = false;
-      
-      if (result.success) {
-        cachedComplaints.push(newComplaint);
-        e.target.reset();
-        showToast('Complaint submitted successfully!', 'success');
-        currentTab = 'complaints';
-        renderUI();
-      } else {
-        showToast('Failed to submit complaint. Please try again.', 'error');
-        renderUI();
-      }
-    }
+  // Disable submit button and show loading
+  const submitButton = e.target.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.innerHTML = '⏳ Submitting...';
+  }
+  
+  const result = await apiPost('create', 'Complaints', newComplaint);
+  
+  if (result.success) {
+    // Add to cache immediately
+    cachedComplaints.push(newComplaint);
+    
+    // Reset form
+    e.target.reset();
+    
+    // Switch to complaints tab and refresh ONLY that section
+    currentTab = 'complaints';
+    refreshComplaintsOnly();
+    
+    showToast('Complaint submitted successfully!', 'success');
+  } else {
+    showToast('Failed to submit complaint. Please try again.', 'error');
+  }
+  
+  // Re-enable submit button
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.innerHTML = config.submit_button_text || 'Submit Complaint';
+  }
+}
 
 
 async function handleUpvote(complaintId) {
