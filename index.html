@@ -1201,6 +1201,429 @@ const adminId = formData.get('admin_id')?.toString().trim();
       `;
     }
 
+   function renderAdminComplaints(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor, filteredComplaints) {
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Complaints</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">Filter Complaints</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+              <div>
+                <label for="status-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Status</label>
+                <select id="status-filter" onchange="setStatusFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${statusFilter === 'all' ? 'selected' : ''}>All Statuses</option>
+                  ${statusTypes.map(st => `<option value="${st.value}" ${statusFilter === st.value ? 'selected' : ''}>${st.label}</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label for="category-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Category</label>
+                <select id="category-filter" onchange="setCategoryFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${categoryFilter === 'all' ? 'selected' : ''}>All Categories</option>
+                  ${categories.map(cat => `<option value="${cat}" ${categoryFilter === cat ? 'selected' : ''}>${cat}</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label for="date-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Date Range</label>
+                <select id="date-filter" onchange="setDateFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${dateFilter === 'all' ? 'selected' : ''}>All Time</option>
+                  <option value="today" ${dateFilter === 'today' ? 'selected' : ''}>Today</option>
+                  <option value="week" ${dateFilter === 'week' ? 'selected' : ''}>Last 7 Days</option>
+                  <option value="month" ${dateFilter === 'month' ? 'selected' : ''}>Last 30 Days</option>
+                  <option value="year" ${dateFilter === 'year' ? 'selected' : ''}>Last Year</option>
+                  <option value="custom" ${dateFilter === 'custom' ? 'selected' : ''}>Custom Range</option>
+                </select>
+              </div>
+            </div>
+
+            ${dateFilter === 'custom' ? `
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                <div>
+                  <label for="start-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Start Date</label>
+                  <input type="date" id="start-date" value="${startDate}" onchange="setStartDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+                <div>
+                  <label for="end-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">End Date</label>
+                  <input type="date" id="end-date" value="${endDate}" onchange="setEndDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+              </div>
+            ` : ''}
+
+            <p style="font-size: ${baseSize * 0.9}px; margin: 1rem 0 0 0; color: ${secondaryColor};">
+              Showing ${filteredComplaints.length} complaint${filteredComplaints.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+
+          <div style="display: grid; gap: 1.5rem;">
+            ${filteredComplaints.length === 0 ? `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 3rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize * 1.1}px; color: ${secondaryColor}; margin: 0;">No complaints found matching your filters.</p>
+              </div>
+            ` : filteredComplaints.map(complaint => `
+              <div class="complaint-card" style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                  <div style="flex: 1; min-width: 200px;">
+                    <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 0.5rem 0;">${complaint.title}</h3>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                      <span style="background: ${backgroundColor}; color: ${textColor}; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                        ${complaint.category}
+                      </span>
+                      <span class="status-badge" style="background: ${getStatusColor(complaint.status)}; color: white;">
+                        ${getStatusLabel(complaint.status)}
+                      </span>
+                    </div>
+                  </div>
+                  <div style="text-align: right;">
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0;">👤 ${complaint.residentName}</p>
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0.25rem 0 0 0;">📅 ${new Date(complaint.createdAt).toLocaleDateString()}</p>
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${primaryColor}; margin: 0.25rem 0 0 0; font-weight: 600;">👍 ${complaint.upvotes} votes</p>
+                  </div>
+                </div>
+                
+                <p style="font-size: ${baseSize}px; color: ${textColor}; margin: 0 0 1.5rem 0; line-height: 1.6;">${complaint.description}</p>
+                
+                <div>
+                  <label for="status-${complaint.id}" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Update Status</label>
+                  <select id="status-${complaint.id}" onchange="handleStatusUpdate('${complaint.id}', this.value)" value="${complaint.status}" style="width: 100%; max-width: 300px; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                    ${statusTypes.map(st => `<option value="${st.value}" ${complaint.status === st.value ? 'selected' : ''}>${st.label}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderReportsTab(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const reportData = generateReportData();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Complaint Reports & Analytics</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">Report Filters</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+              <div>
+                <label for="report-status-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Status</label>
+                <select id="report-status-filter" onchange="setReportStatusFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${reportStatusFilter === 'all' ? 'selected' : ''}>All Statuses</option>
+                  ${statusTypes.map(st => `<option value="${st.value}" ${reportStatusFilter === st.value ? 'selected' : ''}>${st.label}</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label for="report-date-filter" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Date Range</label>
+                <select id="report-date-filter" onchange="setReportDateFilter(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                  <option value="all" ${reportDateFilter === 'all' ? 'selected' : ''}>All Time</option>
+                  <option value="today" ${reportDateFilter === 'today' ? 'selected' : ''}>Today</option>
+                  <option value="week" ${reportDateFilter === 'week' ? 'selected' : ''}>Last 7 Days</option>
+                  <option value="month" ${reportDateFilter === 'month' ? 'selected' : ''}>Last 30 Days</option>
+                  <option value="year" ${reportDateFilter === 'year' ? 'selected' : ''}>Last Year</option>
+                  <option value="custom" ${reportDateFilter === 'custom' ? 'selected' : ''}>Custom Range</option>
+                </select>
+              </div>
+            </div>
+
+            ${reportDateFilter === 'custom' ? `
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                <div>
+                  <label for="report-start-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Start Date</label>
+                  <input type="date" id="report-start-date" value="${reportStartDate}" onchange="setReportStartDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+                <div>
+                  <label for="report-end-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">End Date</label>
+                  <input type="date" id="report-end-date" value="${reportEndDate}" onchange="setReportEndDate(this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+            <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); text-align: center;">
+              <p style="font-size: ${baseSize * 0.9}px; color: ${secondaryColor}; margin: 0 0 0.5rem 0; font-weight: 500;">Total Complaints</p>
+              <p style="font-size: ${baseSize * 2.5}px; font-weight: 700; margin: 0; color: ${primaryColor};">${reportData.total}</p>
+            </div>
+
+            ${statusTypes.map(st => `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); text-align: center;">
+                <p style="font-size: ${baseSize * 0.9}px; color: ${secondaryColor}; margin: 0 0 0.5rem 0; font-weight: 500;">${st.label}</p>
+                <p style="font-size: ${baseSize * 2.5}px; font-weight: 700; margin: 0; color: ${st.color};">${reportData.statusCounts[st.value]}</p>
+              </div>
+            `).join('')}
+          </div>
+
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1.5rem 0; text-align: center;">Complaints by Status</h3>
+            <div style="display: flex; justify-content: center;">
+              <canvas id="report-chart" width="400" height="400"></canvas>
+            </div>
+            
+            <div style="margin-top: 2rem;">
+              <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">Legend</h4>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem;">
+                ${statusTypes.map(st => `
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div style="width: 20px; height: 20px; background: ${st.color}; border-radius: 4px;"></div>
+                    <span style="font-size: ${baseSize * 0.9}px;">${st.label}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminAnnouncements(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const announcements = getAnnouncements();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Announcements</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">${editingAnnouncement ? 'Edit Announcement' : 'Create New Announcement'}</h3>
+            
+            <form id="announcement-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="announcement-title" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Title</label>
+                <input type="text" id="announcement-title" name="title" required value="${editingAnnouncement ? editingAnnouncement.title : ''}" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="announcement-content" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Content</label>
+                <textarea id="announcement-content" name="content" required rows="4" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box; resize: vertical;">${editingAnnouncement ? editingAnnouncement.content : ''}</textarea>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div>
+                  <label for="announcement-priority" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Priority</label>
+                  <select id="announcement-priority" name="priority" required style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; background: ${surfaceColor};">
+                    <option value="high" ${editingAnnouncement && editingAnnouncement.priority === 'high' ? 'selected' : ''}>High</option>
+                    <option value="medium" ${editingAnnouncement && editingAnnouncement.priority === 'medium' ? 'selected' : ''}>Medium</option>
+                    <option value="low" ${editingAnnouncement && editingAnnouncement.priority === 'low' ? 'selected' : ''}>Low</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="announcement-date" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Date</label>
+                  <input type="date" id="announcement-date" name="date" required value="${editingAnnouncement ? editingAnnouncement.date : new Date().toISOString().split('T')[0]}" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 1rem;">
+                <button type="submit" style="flex: 1; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                  ${editingAnnouncement ? 'Update Announcement' : 'Create Announcement'}
+                </button>
+                ${editingAnnouncement ? `
+                  <button type="button" onclick="cancelEditAnnouncement()" style="padding: 1rem 1.5rem; background: ${backgroundColor}; color: ${textColor}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Cancel
+                  </button>
+                ` : ''}
+              </div>
+            </form>
+          </div>
+
+          <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1rem 0;">Existing Announcements (${announcements.length})</h3>
+          
+          <div style="display: grid; gap: 1rem;">
+            ${announcements.length === 0 ? `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0;">No announcements yet. Create your first announcement above.</p>
+              </div>
+            ` : announcements.map(announcement => {
+              const priorityColors = {
+                high: '#f87171',
+                medium: '#fb923c',
+                low: '#60a5fa'
+              };
+              
+              return `
+                <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                  <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 1;">
+                      <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 0.5rem 0;">${announcement.title}</h4>
+                      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="background: ${priorityColors[announcement.priority]}; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                          ${announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)} Priority
+                        </span>
+                        <span style="background: ${backgroundColor}; color: ${textColor}; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: ${baseSize * 0.85}px; font-weight: 500;">
+                          📅 ${new Date(announcement.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                      <button onclick="startEditAnnouncement('${announcement.id}')" style="padding: 0.5rem 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                        Edit
+                      </button>
+                      <button onclick="handleDeleteAnnouncement('${announcement.id}')" style="padding: 0.5rem 1rem; background: #f87171; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <p style="font-size: ${baseSize}px; color: ${textColor}; margin: 0; line-height: 1.6;">${announcement.content}</p>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminOfficials(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const officials = getOfficials();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Barangay Officials</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">${editingOfficial ? 'Edit Official' : 'Add New Official'}</h3>
+            
+            <form id="official-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="official-name" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Full Name</label>
+                <input type="text" id="official-name" name="name" required value="${editingOfficial ? editingOfficial.name : ''}" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="official-position" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Position</label>
+                <input type="text" id="official-position" name="position" required value="${editingOfficial ? editingOfficial.position : ''}" placeholder="e.g., Barangay Captain, Kagawad" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="official-contact" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Contact Number</label>
+                <input type="tel" id="official-contact" name="contact" required value="${editingOfficial ? editingOfficial.contact : ''}" placeholder="09XX-XXX-XXXX" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="display: flex; gap: 1rem;">
+                <button type="submit" style="flex: 1; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                  ${editingOfficial ? 'Update Official' : 'Add Official'}
+                </button>
+                ${editingOfficial ? `
+                  <button type="button" onclick="cancelEditOfficial()" style="padding: 1rem 1.5rem; background: ${backgroundColor}; color: ${textColor}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Cancel
+                  </button>
+                ` : ''}
+              </div>
+            </form>
+          </div>
+
+          <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1rem 0;">Current Officials (${officials.length})</h3>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+            ${officials.length === 0 ? `
+              <div style="grid-column: 1 / -1; background: ${surfaceColor}; border-radius: 12px; padding: 2rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0;">No officials added yet. Add your first official above.</p>
+              </div>
+            ` : officials.map(official => `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div style="margin-bottom: 1rem;">
+                  <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 0.25rem 0;">${official.name}</h4>
+                  <p style="font-size: ${baseSize * 0.9}px; color: ${primaryColor}; font-weight: 600; margin: 0;">${official.position}</p>
+                </div>
+                
+                <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; margin: 0 0 1rem 0;">
+                  📞 ${official.contact}
+                </p>
+                
+                <div style="display: flex; gap: 0.5rem;">
+                  <button onclick="startEditOfficial('${official.id}')" style="flex: 1; padding: 0.75rem; background: ${primaryColor}; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                    Edit
+                  </button>
+                  <button onclick="handleDeleteOfficial('${official.id}')" style="flex: 1; padding: 0.75rem; background: #f87171; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                    Remove
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminHotlines(baseSize, fontFamily, backgroundColor, surfaceColor, textColor, primaryColor, secondaryColor) {
+      const hotlines = getHotlines();
+      
+      return `
+        <div>
+          <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; margin: 0 0 1.5rem 0;">Manage Emergency Hotlines</h2>
+          
+          <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 1rem 0;">${editingHotline ? 'Edit Hotline' : 'Add New Hotline'}</h3>
+            
+            <form id="hotline-form">
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-service" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Service Name</label>
+                <input type="text" id="hotline-service" name="service_name" required value="${editingHotline ? editingHotline.serviceName : ''}" placeholder="e.g., Barangay Emergency, Fire Department" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-phone" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Phone Number</label>
+                <input type="tel" id="hotline-phone" name="phone_number" required value="${editingHotline ? editingHotline.phoneNumber : ''}" placeholder="09XX-XXX-XXXX or XXX-XXXX" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-description" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+                <textarea id="hotline-description" name="description" required rows="2" placeholder="Brief description of the service" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box; resize: vertical;">${editingHotline ? editingHotline.description : ''}</textarea>
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label for="hotline-hours" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 600; margin-bottom: 0.5rem;">Available Hours</label>
+                <input type="text" id="hotline-hours" name="available_hours" required value="${editingHotline ? editingHotline.availableHours : ''}" placeholder="e.g., 24/7, Mon-Fri 8AM-5PM" style="width: 100%; padding: 0.75rem; border: 2px solid ${backgroundColor}; border-radius: 8px; font-size: ${baseSize}px; font-family: ${fontFamily}; color: ${textColor}; box-sizing: border-box;">
+              </div>
+
+              <div style="display: flex; gap: 1rem;">
+                <button type="submit" style="flex: 1; padding: 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                  ${editingHotline ? 'Update Hotline' : 'Add Hotline'}
+                </button>
+                ${editingHotline ? `
+                  <button type="button" onclick="cancelEditHotline()" style="padding: 1rem 1.5rem; background: ${backgroundColor}; color: ${textColor}; border: none; border-radius: 8px; font-size: ${baseSize}px; font-weight: 600; cursor: pointer; font-family: ${fontFamily};">
+                    Cancel
+                  </button>
+                ` : ''}
+              </div>
+            </form>
+          </div>
+
+          <h3 style="font-size: ${baseSize * 1.2}px; font-weight: 600; margin: 0 0 1rem 0;">Active Hotlines (${hotlines.length})</h3>
+          
+          <div style="display: grid; gap: 1rem;">
+            ${hotlines.length === 0 ? `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 2rem; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <p style="font-size: ${baseSize}px; color: ${secondaryColor}; margin: 0;">No hotlines added yet. Add your first emergency hotline above.</p>
+              </div>
+            ` : hotlines.map(hotline => `
+              <div style="background: ${surfaceColor}; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap;">
+                  <div style="flex: 1;">
+                    <h4 style="font-size: ${baseSize * 1.1}px; font-weight: 600; margin: 0 0 0.5rem 0;">🚨 ${hotline.serviceName}</h4>
+                    <p style="font-size: ${baseSize * 1.2}px; color: ${primaryColor}; font-weight: 700; margin: 0 0 0.5rem 0;">📞 ${hotline.phoneNumber}</p>
+                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; margin: 0 0 0.5rem 0;">${hotline.description}</p>
+                    <p style="font-size: ${baseSize * 0.85}px; color: ${secondaryColor}; margin: 0;">⏰ ${hotline.availableHours}</p>
+                  </div>
+                  <div style="display: flex; gap: 0.5rem;">
+                    <button onclick="startEditHotline('${hotline.id}')" style="padding: 0.5rem 1rem; background: ${primaryColor}; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                      Edit
+                    </button>
+                    <button onclick="handleDeleteHotline('${hotline.id}')" style="padding: 0.5rem 1rem; background: #f87171; color: white; border: none; border-radius: 6px; font-size: ${baseSize * 0.85}px; font-weight: 500; cursor: pointer; font-family: ${fontFamily};">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     // ... (Include all other render functions from original code: renderAdminComplaints, renderReportsTab, renderAdminAnnouncements, etc.)
 
     function attachEventListeners() {
