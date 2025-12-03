@@ -176,29 +176,43 @@
     }
 
     // ========== DATA FUNCTIONS ==========
-    async function loadAllData() {
-      isLoading = true;
-      renderUI();
-      
-      const [users, complaints, votes, announcements, officials, hotlines] = await Promise.all([
-        apiGet('Users'),
-        apiGet('Complaints'),
-        apiGet('Votes'),
-        apiGet('Announcements'),
-        apiGet('Officials'),
-        apiGet('Hotlines')
-      ]);
-      
-      cachedUsers = users;
-      cachedComplaints = complaints;
-      cachedVotes = votes;
-      cachedAnnouncements = announcements.sort((a, b) => new Date(b.date) - new Date(a.date));
-      cachedOfficials = officials;
-      cachedHotlines = hotlines;
-      
-      isLoading = false;
-      renderUI();
-    }
+async function loadAllData() {
+  isLoading = true;
+  renderUI();
+
+  const [users, complaints, votes, announcements, officials, hotlines] = await Promise.all([
+    apiGet('Users'),
+    apiGet('Complaints'),
+    apiGet('Votes'),
+    apiGet('Announcements'),
+    apiGet('Officials'),
+    apiGet('Hotlines')
+  ]);
+
+  // Normalize Users: map common field names from Sheets/Apps Script
+  cachedUsers = (Array.isArray(users) ? users : []).map(u => {
+    return {
+      id: u.id || u.ID || u.Id || u.rowId || (u.username ? (u.username + '_' + (u.createdAt || Date.now())) : Date.now().toString()),
+      username: (u.username || u.user || u.user_name || u.User || u.Username || '').toString(),
+      password: (u.password || u.pass || u.pw || '').toString(),
+      fullName: (u.fullName || u.full_name || u.fullname || u.FullName || u.name || '').toString(),
+      userType: (u.userType || u.user_type || (u.adminId ? 'admin' : 'resident') || 'resident').toString(),
+      adminId: (u.adminId || u.admin_id || u.AdminID || '').toString(),
+      createdAt: u.createdAt || u.created_at || u.CreatedAt || ''
+    };
+  });
+
+  // Complaints, votes, announcements etc. keep original but ensure arrays
+  cachedComplaints = Array.isArray(complaints) ? complaints : [];
+  cachedVotes = Array.isArray(votes) ? votes : [];
+  cachedAnnouncements = Array.isArray(announcements) ? announcements.sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
+  cachedOfficials = Array.isArray(officials) ? officials : [];
+  cachedHotlines = Array.isArray(hotlines) ? hotlines : [];
+
+  isLoading = false;
+  renderUI();
+}
+
 
     function getUsers() {
       return cachedUsers;
@@ -344,9 +358,10 @@
       e.preventDefault();
       
       const formData = new FormData(e.target);
-      const username = formData.get('username');
-      const password = formData.get('password');
-      const adminId = formData.get('admin_id');
+const username = formData.get('username')?.toString().trim();
+const password = formData.get('password')?.toString().trim();
+const adminId = formData.get('admin_id')?.toString().trim();
+
 
       isLoading = true;
       renderUI();
