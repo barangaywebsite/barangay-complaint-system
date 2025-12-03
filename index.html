@@ -741,13 +741,15 @@ async function handleUpvote(complaintId) {
     showToast('An error occurred while upvoting', 'error');
   }
 }
-    function handleLogout() {
-      currentUser = null;
-      currentTab = 'complaints';
-      adminTab = 'complaints';
-      renderUI();
-      showToast('Logged out successfully', 'success');
-    }
+function handleLogout() {
+  currentUser = null;
+  // <--- CRITICAL FIX: Clear user session from browser storage
+  localStorage.removeItem('currentUser'); 
+  currentTab = 'complaints';
+  adminTab = 'complaints';
+  renderUI(); // This re-renders the UI, which should now show the login screen
+  showToast('Logged out successfully', 'success');
+}
 
     async function handleStatusUpdate(complaintId, newStatus) {
       const complaint = cachedComplaints.find(c => c.id === complaintId);
