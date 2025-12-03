@@ -82,21 +82,11 @@ window.addEventListener('load', () => {
       const parsed = JSON.parse(savedUserStr);
       // Validate parsed object has minimal required fields
       if (parsed && parsed.id && parsed.userType) {
-        currentUser = parsed;
-        // Load app data and show appropriate tab after successful load
-        loadAllData().then(() => {
-          if (currentUser && currentUser.userType) {
-            switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
-          } else {
-            renderUI();
-          }
-        }).catch(err => {
-          console.error('Error loading data on startup:', err);
-          // Corrupt session or network error: clear stored session and show login
-          localStorage.removeItem('currentUser');
-          currentUser = null;
-          renderUI();
-        });
+        // Store as a candidate but DO NOT automatically set as currentUser.
+        // This forces explicit user confirmation to restore session on reload.
+        savedUserCandidate = parsed;
+        console.log('Found saved user candidate (will require confirmation):', savedUserCandidate);
+        renderUI();
         return;
       } else {
         // Not a valid user object — remove it and show login
@@ -128,6 +118,7 @@ window.addEventListener('load', () => {
     // ========== STATE ==========
     let currentTab = 'complaints';
     let currentUser = null;
+    let savedUserCandidate = null; // candidate restored from localStorage, requires user confirmation
     let authMode = 'login';
     let userType = 'resident';
     let adminTab = 'complaints';
@@ -784,6 +775,37 @@ async function handleUpvote(complaintId) {
       showToast('Logged out successfully', 'success');
     }
 
+    // User explicitly continues as the saved user candidate (after reload)
+    async function continueAsSavedUser() {
+      if (!savedUserCandidate) return;
+      currentUser = savedUserCandidate;
+      // ensure persisted value is consistent
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+      savedUserCandidate = null;
+      isLoading = true;
+      renderUI();
+      try {
+        await loadAllData();
+        switchTab(currentUser.userType === 'admin' ? 'admin' : 'resident');
+        showToast('Session restored', 'success');
+      } catch (err) {
+        console.error('Error restoring session:', err);
+        localStorage.removeItem('currentUser');
+        currentUser = null;
+        renderUI();
+        showToast('Failed to restore session', 'error');
+      } finally {
+        isLoading = false;
+        renderUI();
+      }
+    }
+
+    function dismissSavedUser() {
+      savedUserCandidate = null;
+      localStorage.removeItem('currentUser');
+      renderUI();
+    }
+
     async function handleStatusUpdate(complaintId, newStatus) {
       const complaint = cachedComplaints.find(c => c.id === complaintId);
       
@@ -1166,6 +1188,19 @@ async function handleUpvote(complaintId) {
             </div>
 
             <div style="background: ${surfaceColor}; border-radius: 16px; padding: 2.5rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
+              ${savedUserCandidate ? `
+                <div style="margin-bottom:1rem; padding:0.75rem; border:1px solid #e5e7eb; border-radius:8px; background:#fbfbfd; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+                  <div style="flex:1;">
+                    <strong>Continue as</strong>
+                    <div style="font-weight:600">${savedUserCandidate.fullName || savedUserCandidate.username}</div>
+                    <div style="font-size:12px; color:#64748b">Stored session found — click to continue or switch account</div>
+                  </div>
+                  <div style="display:flex; gap:0.5rem;">
+                    <button onclick="continueAsSavedUser()" style="padding:0.5rem 0.75rem; background:${primaryColor}; color:#fff; border-radius:6px; border:none; cursor:pointer;">Continue</button>
+                    <button onclick="dismissSavedUser()" style="padding:0.5rem 0.75rem; background:transparent; border:1px solid #e5e7eb; color:${textColor}; border-radius:6px; cursor:pointer;">Use different</button>
+                  </div>
+                </div>
+              ` : ''}
               <div style="margin-bottom: 1.5rem;">
                 <div style="display: flex; gap: 0.5rem; background: ${backgroundColor}; padding: 0.25rem; border-radius: 8px;">
                   <button onclick="switchUserType('resident')" style="flex: 1; padding: 0.75rem; border: none; background: ${userType === 'resident' ? surfaceColor : 'transparent'}; color: ${userType === 'resident' ? primaryColor : textColor}; font-weight: ${userType === 'resident' ? '600' : '500'}; font-size: ${baseSize * 0.9}px; border-radius: 6px; cursor: pointer; font-family: ${fontFamily}; box-shadow: ${userType === 'resident' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'};">
