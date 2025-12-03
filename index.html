@@ -171,7 +171,9 @@ async function apiGet(type) {
     return [];
   }
 }
-
+function refreshData() {
+    loadAllData().then(() => renderUI());
+}
 // API POST - Send data (using GET with parameters)
 async function apiPost(action, type, record = null, id = null) {
   try {
@@ -721,7 +723,6 @@ async function handleUpvote(complaintId) {
   }
 }
 function handleLogout() {
-  localStorage.removeItem('currentUser');   // <-- Required
   currentUser = null;
   currentTab = 'complaints';
   adminTab = 'complaints';
